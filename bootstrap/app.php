@@ -16,5 +16,6 @@ if (is_file(BASE_PATH . '/vendor/autoload.php')) {
     });
     require BASE_PATH . '/app/Helpers/functions.php';
 }
+App\Core\Env::load(BASE_PATH . '/.env');
 date_default_timezone_set(config('app')['timezone']);
 return new App\Core\Router();

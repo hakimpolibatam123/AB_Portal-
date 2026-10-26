@@ -1,27 +1,25 @@
 <?php
 declare(strict_types=1);
 
+// Portal cards per section. A card with a null href is not available yet and shows a notice when clicked.
 return [
-    'categories' => [
-        'daily' => ['title' => 'Monitoring Harian', 'icon' => 'calendar'],
-        'monitoring' => ['title' => 'Monitoring & Laporan', 'icon' => 'chart'],
-        'systems' => ['title' => 'Sistem', 'icon' => 'monitor'],
+    'sections' => [
+        'daily' => ['title' => 'MONITORING HARIAN', 'icon' => 'calendar-days', 'class' => 'pt-2', 'grid' => 'lg:grid-cols-6'],
+        'monitoring' => ['title' => 'MONITORING & LAPORAN', 'icon' => 'chart-pie', 'class' => 'pt-4', 'grid' => 'lg:grid-cols-7'],
+        'systems' => ['title' => 'SISTEM', 'icon' => 'monitor', 'class' => 'pt-4 pb-8', 'grid' => 'lg:grid-cols-7'],
     ],
     'cards' => [
-        ['key' => 'hardware-server', 'title' => 'Form Monitoring Hardware Server IT', 'description' => 'Status & pemeliharaan server IT', 'icon' => 'server', 'tone' => 'emerald', 'category' => 'daily', 'type' => 'internal', 'target' => '/forms/hardware-server', 'form_slug' => 'hardware-server', 'enabled' => true, 'sort_order' => 10],
-        ['key' => 'kesesuaian-user', 'title' => 'Kesesuaian User', 'description' => 'Verifikasi & kesesuaian akses user', 'icon' => 'user-check', 'tone' => 'teal', 'category' => 'daily', 'type' => 'internal', 'target' => '/forms/kesesuaian-user', 'form_slug' => 'kesesuaian-user', 'enabled' => true, 'sort_order' => 20],
-        ['key' => 'suhu-server', 'title' => 'Rata-rata Suhu Server Perbulan', 'description' => 'Tren suhu server bulanan', 'icon' => 'thermometer', 'tone' => 'amber', 'category' => 'daily', 'type' => 'internal', 'target' => '/forms/suhu-server', 'form_slug' => 'suhu-server', 'enabled' => true, 'sort_order' => 30],
-        ['key' => 'cctv', 'title' => 'Monitoring CCTV', 'description' => 'Akses layanan monitoring CCTV', 'icon' => 'video', 'tone' => 'sky', 'category' => 'daily', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 40],
-        ['key' => 'clear-desk', 'title' => 'Clear Desk and Screen', 'description' => 'Inspeksi & kepatuhan clean desk', 'icon' => 'monitor', 'tone' => 'slate', 'category' => 'daily', 'type' => 'internal', 'target' => '/forms/clear-desk', 'form_slug' => 'clear-desk', 'enabled' => true, 'sort_order' => 50],
-        ['key' => 'antrian-online', 'title' => 'Antrian Online', 'description' => 'Status & kuota tiket antrian', 'icon' => 'ticket', 'tone' => 'cyan', 'category' => 'daily', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 60],
-        ['key' => 'it-online', 'title' => 'IT Online', 'description' => 'Status konektivitas & server IT online', 'icon' => 'globe', 'tone' => 'teal', 'category' => 'monitoring', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 70],
-        ['key' => 'monitoring-dashboard', 'title' => 'Dashboard', 'description' => 'Visualisasi & analitik sistem terpusat', 'icon' => 'dashboard', 'tone' => 'cyan', 'category' => 'monitoring', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 80],
-        ['key' => 'monitoring-his', 'title' => 'HIS', 'description' => 'Hospital Information System', 'icon' => 'hospital', 'tone' => 'emerald', 'category' => 'monitoring', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 90],
-        ['key' => 'abe-office', 'title' => 'ABE Office', 'description' => 'IM & SPPD', 'icon' => 'file', 'tone' => 'rose', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 100],
-        ['key' => 'kpi-dashboard', 'title' => 'Dashboard KPI', 'description' => 'Akses menggunakan jaringan RS / VPN', 'icon' => 'mail', 'tone' => 'purple', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 110],
-        ['key' => 'monitoring-setting', 'title' => 'Monitoring Setting', 'description' => 'Perbandingan sys_setting antar RS', 'icon' => 'target', 'tone' => 'amber', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 120],
-        ['key' => 'chatbot-ai', 'title' => 'Chatbot AI', 'description' => 'Akses layanan asisten AI', 'icon' => 'bot', 'tone' => 'orange', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 130],
-        ['key' => 'systems-dashboard', 'title' => 'Dashboard', 'description' => 'Visualisasi & analitik sistem terpusat', 'icon' => 'dashboard', 'tone' => 'cyan', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 140],
-        ['key' => 'systems-his', 'title' => 'HIS', 'description' => 'Hospital Information System', 'icon' => 'hospital', 'tone' => 'emerald', 'category' => 'systems', 'type' => 'external', 'target' => null, 'form_slug' => null, 'enabled' => true, 'sort_order' => 150],
+        ['section' => 'daily', 'badge' => 'live', 'icon' => 'portal-thermometer', 'title' => 'RATA - RATA SUHU SERVER PERBULAN', 'description' => 'Tren suhu server bulanan', 'href' => '/form/suhu'],
+        ['section' => 'daily', 'badge' => 'live', 'icon' => 'portal-video', 'title' => 'MONITORING CCTV', 'description' => 'Live stream & status CCTV', 'href' => '/form/cctv'],
+        ['section' => 'daily', 'badge' => 'live', 'icon' => 'monitor', 'title' => 'CLEAR DESK AND SCREEN', 'description' => 'Inspeksi & kepatuhan clean desk', 'href' => '/form/cleardesk'],
+        ['section' => 'monitoring', 'badge' => 'new', 'icon' => 'portal-globe', 'title' => 'IT - ONLINE', 'description' => 'Status konektivitas & server IT online', 'href' => null],
+        ['section' => 'monitoring', 'badge' => 'new', 'icon' => 'portal-dashboard', 'title' => 'Dashboard', 'description' => 'Visualisasi & analitik sistem terpusat', 'href' => null],
+        ['section' => 'monitoring', 'badge' => 'new', 'icon' => 'portal-hospital', 'title' => 'HIS', 'description' => 'Hospital Information System', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'file-text', 'title' => 'ABE OFFICE', 'description' => 'IM & SPPD', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'mail', 'title' => 'Dashboard KPI', 'description' => 'Akses Menggunakan Jaringan RS/ VPN', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'target', 'title' => 'Monitoring Setting', 'description' => 'Perbandingan sys_setting antar RS', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'bot', 'title' => 'Chatbot AI', 'description' => 'AI', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'portal-dashboard', 'title' => 'Dashboard', 'description' => 'Visualisasi & analitik sistem terpusat', 'href' => null],
+        ['section' => 'systems', 'badge' => 'new', 'icon' => 'portal-hospital', 'title' => 'HIS', 'description' => 'Hospital Information System', 'href' => null],
     ],
 ];

@@ -4,12 +4,13 @@ declare(strict_types=1);
 // Initial frontend values; replace with account and submission data during backend integration.
 return [
     'profile' => [
-        'name' => 'IT Botania',
+        'name' => 'IT botania',
         'initials' => 'IB',
-        'subtitle' => 'IT Division',
+        'role' => 'Superadmin',
+        'email' => 'it.btc@awalbros.com',
     ],
     'daily_progress' => [
-        'completed' => 5,
-        'target' => 6,
+        'completed' => 2,
+        'target' => 3,
     ],
 ];

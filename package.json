@@ -6,12 +6,16 @@
     "dev": "php -S 127.0.0.1:8080 -t public public/index.php",
     "build": "tailwindcss -i resources/css/app.css -o public/assets/css/app.css --minify",
     "watch": "tailwindcss -i resources/css/app.css -o public/assets/css/app.css --watch",
-    "serve": "php -S 127.0.0.1:8080 -t public public/index.php"
+    "serve": "php -S 127.0.0.1:8080 -t public public/index.php",
+    "db:check": "php bin/db-check.php",
+    "db:migrate": "php bin/migrate.php"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.1.0",
-    "tailwindcss": "^4.1.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@fontsource/inter": "^5.2.0",
-    "@fontsource/playfair-display": "^5.2.0"
+    "@fontsource/playfair-display": "^5.2.0",
+    "@tailwindcss/cli": "^4.1.0",
+    "tailwindcss": "^4.1.0"
   }
 }
