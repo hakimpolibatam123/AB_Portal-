@@ -16,19 +16,99 @@
         </div>
     </section>
 
-    <?php foreach ($groups as $categoryKey => $category): ?>
-    <section aria-labelledby="section-<?= e($categoryKey) ?>" class="portal-category space-y-3 <?= $categoryKey === 'daily' ? 'pt-2' : ($categoryKey === 'systems' ? 'pb-8 pt-4' : 'pt-4') ?>">
-        <h2 id="section-<?= e($categoryKey) ?>" class="flex items-center gap-2 text-[11.7px] font-bold uppercase tracking-wider text-slate-500">
-            <?= icon($category['icon'], 'size-3.5 text-slate-400') ?><?= e($category['title']) ?>
-        </h2>
-        <?php if ($category['cards'] === []): ?>
-            <p class="rounded-xl border border-dashed border-slate-300 p-6 text-base text-slate-600">Belum ada menu pada kategori ini.</p>
+    <?php if ($editable): ?>
+    <p class="demo-notice" role="note">
+        <?= card_icon('info', 'size-4 shrink-0') ?>
+        <span><strong>Data contoh.</strong> Perubahan di dashboard hanya tersimpan di tab browser ini dan hilang saat tab ditutup.</span>
+        <button type="button" class="section-textbtn" data-reset-demo>Atur ulang</button>
+    </p>
+    <?php endif; ?>
+
+    <div id="dashboard-sections" class="space-y-5">
+    <?php foreach ($groups as $index => $group):
+        $sectionId = 'section-' . e((string) ($group['id'] ?? $group['slug']));
+        $isForms = $group['kind'] === 'forms';
+        // First paint uses the default filter "Jadwal Hari Ini" (dashboard.js redraws with the remembered one).
+        $visible = array_values(array_filter($group['cards'], static fn (array $card): bool => !$card['hidden']));
+        $isDue = static fn (array $card): bool => $card['status'] !== null && $card['status']['due'];
+        $dueCount = count(array_filter($visible, $isDue));
+        $doneCount = count(array_filter($visible, static fn (array $card): bool => $isDue($card) && $card['done_today']));
+        if ($isForms) {
+            $group['cards'] = array_values(array_filter($group['cards'], static fn (array $card): bool => $card['hidden'] || $isDue($card)));
+        }
+        $filteredEmpty = $isForms && $visible !== [] && array_filter($group['cards'], static fn (array $card): bool => !$card['hidden']) === [];
+        $hiddenCount = count(array_filter($group['cards'], static fn (array $card): bool => $card['hidden']));
+        $spacing = $index === 0 ? 'pt-2' : ($index === count($groups) - 1 ? 'pb-8 pt-4' : 'pt-4');
+    ?>
+    <section aria-labelledby="<?= $sectionId ?>" class="portal-category space-y-3 <?= $spacing ?>" data-section>
+        <div class="section-head">
+            <h2 id="<?= $sectionId ?>" class="flex items-center gap-2 text-[11.7px] font-bold uppercase tracking-wider text-slate-500">
+                <?= card_icon($group['icon'], 'size-3.5 text-slate-400') ?><?= e($group['title']) ?>
+            </h2>
+            <?php if ($editable && ($hiddenCount > 0 || ($isForms && $showDialogs))): ?>
+            <div class="section-actions">
+                <?php if ($hiddenCount > 0): ?>
+                <button type="button" class="section-textbtn" data-toggle-hidden aria-pressed="false" data-label-show="<?= e('Tampilkan ' . $hiddenCount . ' tersembunyi') ?>" data-label-hide="<?= e('Sembunyikan ' . $hiddenCount . ' tersembunyi') ?>">
+                    <?= card_icon('eye', 'size-3.5') ?><span data-toggle-label><?= e('Tampilkan ' . $hiddenCount . ' tersembunyi') ?></span>
+                </button>
+                <?php endif; ?>
+                <?php if ($isForms && $showDialogs): ?>
+                <button type="button" class="dash-btn dash-btn--primary dash-btn--sm" data-open-add aria-haspopup="dialog"><?= card_icon('plus', 'size-4') ?>Tambah</button>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php if ($isForms): ?>
+        <div class="section-filter">
+            <div class="section-seg" role="group" aria-label="Filter form">
+                <button type="button" data-filter="today" aria-pressed="true">Jadwal Hari Ini</button>
+                <button type="button" data-filter="all" aria-pressed="false">Semua Form</button>
+            </div>
+            <span class="section-count"><i aria-hidden="true"></i><b><?= e($dueCount . ' dari ' . count($visible) . ' form dijadwalkan hari ini') ?></b><?= $dueCount > 0 ? e(' · ' . $doneCount . ' selesai') : '' ?></span>
+        </div>
+        <?php endif; ?>
+        <?php if ($filteredEmpty): ?>
+        <div class="section-empty">
+            <?= card_icon('calendar-check', 'size-6 text-slate-400') ?>
+            <b>Tidak ada form yang dijadwalkan hari ini</b>
+            <span>Form lain tetap bisa dibuka dari tampilan Semua Form.</span>
+            <button type="button" class="dash-btn dash-btn--ghost dash-btn--sm" data-filter="all"><?= card_icon('list-checks', 'size-4') ?>Lihat Semua Form</button>
+        </div>
+        <?php if ($group['cards'] !== []): ?>
+        <div class="card-grid--forms grid grid-cols-1 gap-3.5">
+            <?php foreach ($group['cards'] as $card) { require BASE_PATH . '/app/Views/components/portal-card.php'; } ?>
+        </div>
+        <?php endif; ?>
+        <?php elseif ($group['cards'] === []): ?>
+        <div class="section-empty">
+            <?= card_icon($isForms ? 'clipboard-list' : 'link', 'size-6 text-slate-400') ?>
+            <b><?= $isForms ? 'Belum ada form di bagian ini' : 'Belum ada tautan di bagian ini' ?></b>
+            <span><?= $isForms ? 'Buat form monitoring pertama untuk mulai mencatat.' : 'Tambahkan tautan lewat tombol + Tambah, tab Kategori & Tautan.' ?></span>
+            <?php if ($editable && $group['custom']): ?>
+            <button type="button" class="section-textbtn section-textbtn--danger" data-delete-section="<?= e((string) $group['id']) ?>"><?= card_icon('trash-2', 'size-3.5') ?>Hapus kategori ini</button>
+            <?php endif; ?>
+        </div>
         <?php else: ?>
-        <div class="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 <?= $categoryKey === 'daily' ? 'lg:grid-cols-6' : 'lg:grid-cols-7' ?>">
-            <?php foreach ($category['cards'] as $card) { require BASE_PATH . '/app/Views/components/portal-card.php'; } ?>
+        <?php if ($hiddenCount === count($group['cards'])): ?>
+        <p class="section-empty section-empty--compact" data-all-hidden>Semua kartu di bagian ini disembunyikan.</p>
+        <?php endif; ?>
+        <div class="<?= $isForms ? 'card-grid--forms grid grid-cols-1 gap-3.5' : 'grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7' ?>">
+            <?php foreach ($group['cards'] as $card) { require BASE_PATH . '/app/Views/components/portal-card.php'; } ?>
         </div>
         <?php endif; ?>
     </section>
     <?php endforeach; ?>
+    </div>
     <noscript><p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Aktifkan JavaScript untuk menggunakan menu portal.</p></noscript>
 </main>
+<?php if ($editable): ?>
+<div class="card-menu" id="card-menu" role="menu" data-editor-url="<?= e(url('/form-editor')) ?>" data-fill-url="<?= e(url('/form-dinamis')) ?>" data-responses-url="<?= e(url('/form-dinamis/respons')) ?>" hidden></div>
+<template id="dash-icons"><?php foreach ($iconNames as $name): ?><span data-icon="<?= e($name) ?>"><?= card_icon($name) ?></span><?php endforeach; ?></template>
+<script type="application/json" id="dashboard-state"><?= json_encode($clientState, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
+<?php endif; ?>
+<?php if ($showDialogs): ?>
+<?php require BASE_PATH . '/app/Views/components/dashboard-dialogs.php'; ?>
+<?php endif; ?>
+<?php if ($editable): ?>
+<?= partial('toast') ?>
+<?php endif; ?>

@@ -19,10 +19,7 @@ $radioOption = static fn (string $name, string $value, bool $checked, string $bo
                         . '<input type="hidden" name="inspected_at" value="' . e($module['inspected_at']) . '">'],
                 ],
                 'required' => partial('badge', ['label' => '* WAJIB DIISI', 'icon' => 'circle-alert', 'wrap' => false, 'class' => 'gf-required-note']),
-                'links' => [
-                    '<a class="gf-link" href="' . e(url('/rekap/cctv')) . '">' . design_icon('clipboard-list') . '<span>Lihat Rekap &amp; Unduh Laporan</span></a>',
-                    '<a class="gf-link" href="' . e(url('/rekap/cctv')) . '">' . design_icon('history') . '<span>Lihat Riwayat &amp; Rekap</span></a>',
-                ],
+                'rekap' => url('/rekap/cctv'),
             ]) ?>
 
             <?= partial('gf-section', ['number' => 1, 'title' => 'Data Pemeriksaan CCTV Harian', 'description' => 'Formulir Log Operasional Standar NOC IT Botania']) ?>

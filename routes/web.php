@@ -8,11 +8,15 @@ use App\Controllers\ClearDeskController;
 use App\Controllers\AntrianOnlineController;
 use App\Controllers\HardwareServerController;
 use App\Controllers\KesesuaianUserController;
+use App\Controllers\DynamicFormController;
+use App\Controllers\FormEditorController;
 use App\Controllers\HomeController;
 use App\Controllers\SuhuController;
 use App\Core\RequireLogin;
 
 $home = new HomeController();
+$formEditor = new FormEditorController();
+$dynamicForm = new DynamicFormController();
 $auth = new AuthController();
 $account = new AccountController();
 $suhu = new SuhuController();
@@ -30,6 +34,10 @@ $router->post('/login', [$auth, 'login'], public: true);
 $router->post('/logout', [$auth, 'logout']);
 
 $router->get('/', [$home, 'index']);
+$router->get('/form-editor', [$formEditor, 'edit']);
+// Dynamic forms (frontend only, dummy data in the browser): fill-in page and responses.
+$router->get('/form-dinamis', [$dynamicForm, 'fill']);
+$router->get('/form-dinamis/respons', [$dynamicForm, 'responses']);
 $router->get('/password', [$account, 'password']);
 $router->get('/users', [$account, 'users']);
 

@@ -15,10 +15,7 @@
                 ['label' => 'Periode Verifikasi', 'value' => '<time id="compliance-period" datetime="' . e($loginDate) . '">' . e(date_wib()) . '</time>'],
             ],
             'required' => '<span class="gf-required-note">* Wajib Diisi</span>',
-            'links' => [
-                '<a href="/reports/kesesuaian-user" class="gf-link">' . icon('download', 'size-4 shrink-0') . 'Lihat Rekap &amp; Unduh Laporan</a>',
-                '<a href="/reports/kesesuaian-user" class="gf-link">' . icon('table', 'size-4') . 'Lihat Riwayat &amp; Rekap Laporan</a>',
-            ],
+            'rekap' => url('/reports/kesesuaian-user'),
         ]) ?>
 
         <?= partial('gf-section', [

@@ -1,6 +1,7 @@
 <?php
 // Module pages retain their content styling; every page uses the shared portal header.
-$modulePage = !isset($groups);
+// $portalPage puts another page (the form editor) on the dashboard's styling.
+$modulePage = !isset($groups) && empty($portalPage);
 ?>
 <!doctype html>
 <html lang="id">

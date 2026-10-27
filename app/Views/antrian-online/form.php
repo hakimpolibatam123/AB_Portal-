@@ -16,10 +16,7 @@
                 ['label' => 'Akun Verifikator IT', 'value' => '<span>' . e($profile['name']) . '</span><span class="gf-meta-sub">' . e($profile['subtitle']) . '</span>'],
                 ['label' => 'Waktu & Tanggal', 'value' => '<time id="queue-recorded-time" datetime="' . e($recordedAt) . '" class="gf-mono">' . e(date('d/m/Y H:i')) . ' WIB</time>'],
             ],
-            'links' => [
-                '<a href="/reports/antrian-online" class="gf-link">' . icon('file', 'size-4') . 'Lihat Rekap &amp; Unduh Laporan</a>',
-                '<a href="/reports/antrian-online" class="gf-link">' . icon('history', 'size-4') . 'Lihat Riwayat &amp; Rekap</a>',
-            ],
+            'rekap' => url('/reports/antrian-online'),
         ]) ?>
 
         <?= partial('gf-section', [

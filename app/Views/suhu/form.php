@@ -8,10 +8,7 @@
                 ['label' => 'PERIODE LAPORAN', 'value' => 'Oktober 2026 (Aktif)'],
             ],
             'required' => '<span class="gf-required-note">* Wajib Diisi</span>',
-            'links' => [
-                '<a class="gf-link" href="' . e(url('/rekap/suhu')) . '">' . design_icon('file-text') . '<span>Lihat Rekap &amp; Unduh Laporan</span></a>',
-                '<a class="gf-link" href="' . e(url('/rekap/suhu')) . '">' . design_icon('history') . '<span>Lihat Riwayat &amp; Rekap</span></a>',
-            ],
+            'rekap' => url('/rekap/suhu'),
         ]) ?>
 
         <?= partial('gf-section', ['number' => 1, 'title' => 'Data Pengukuran Suhu Server Bulanan']) ?>

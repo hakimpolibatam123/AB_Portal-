@@ -87,7 +87,7 @@
             <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div class="flex flex-wrap items-center gap-3">
                     <a href="/" class="button-neutral module-action inspection-button border"><?= icon('arrow-left', 'size-4 shrink-0') ?><span>Kembali ke Portal Terpadu</span></a>
-                    <a href="/reports/hardware-server" class="button-soft module-action inspection-button border"><?= icon('file', 'size-4 shrink-0') ?><span>Lihat Riwayat &amp; Rekap Laporan</span></a>
+                    <a href="<?= e(url('/reports/hardware-server')) ?>" class="button-soft module-action inspection-button border" aria-label="Lihat rekap Form Monitoring Hardware Server IT"><?= card_icon('chart-column', 'size-4 shrink-0') ?><span>Lihat Rekap</span></a>
                 </div>
                 <div class="flex w-full flex-col-reverse gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                     <button type="reset" class="button-ghost module-action inline-flex min-h-11 w-full items-center justify-center rounded-lg px-3 py-2.5 text-xs font-semibold sm:w-auto">Reset Form</button>

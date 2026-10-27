@@ -3,7 +3,8 @@
  * Header card of a Google-Forms style form page (resources/css/gform.css).
  * @var string $title
  * Optional: $titleId, $eyebrow, $description, $meta (list of ['label' => text, 'value' => HTML, 'labelFor' => id]),
- *           $required (HTML of the form's "Wajib Diisi" note), $links (list of HTML links to the rekap page).
+ *           $required (HTML of the form's "Wajib Diisi" note), $rekap (URL of the module's rekap page, shown as an
+ *           outlined "Lihat Rekap" button).
  */
 ?>
 <section class="gf-card gf-card--header"<?= attrs(['aria-labelledby' => $titleId ?? null]) ?>>
@@ -20,10 +21,10 @@
         <?php endforeach; ?>
     </div>
     <?php endif; ?>
-    <?php if (!empty($required) || !empty($links)): ?>
+    <?php if (!empty($required) || !empty($rekap)): ?>
     <div class="gf-header-foot">
         <?= $required ?? '' ?>
-        <?php if (!empty($links)): ?><div class="gf-links"><?= implode('', $links) ?></div><?php endif; ?>
+        <?php if (!empty($rekap)): ?><div class="gf-links"><a class="gf-rekap" href="<?= e($rekap) ?>" aria-label="<?= e('Lihat rekap ' . $title) ?>"><?= card_icon('chart-column', 'gf-rekap__icon') ?>Lihat Rekap</a></div><?php endif; ?>
     </div>
     <?php endif; ?>
 </section>

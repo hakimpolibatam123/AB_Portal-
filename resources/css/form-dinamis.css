@@ -1,0 +1,62 @@
+/*
+ * Dynamic forms (app/Views/form-dinamis, public/assets/js/form-dinamis.js), frontend only. The fill-in
+ * page is the Google-Forms style of gform.css plus the answer types it does not have yet (scale,
+ * rating, titles and images); the responses page is a simple table.
+ */
+
+/* Fill-in page */
+.portal-page .gf-page .fd-short { max-width: 260px; }
+.portal-page .fd-qimg { display: block; max-width: 100%; max-height: 300px; margin-top: 10px; border-radius: 10px; object-fit: contain; }
+.portal-page .fd-title h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--gf-ink, #17262a); }
+.portal-page .fd-figure { margin: 0; }
+.portal-page .fd-figure img { display: block; max-width: 100%; max-height: 420px; margin: 0 auto; border-radius: 8px; object-fit: contain; }
+.portal-page .fd-figure figcaption { margin-top: 8px; font-size: 13.5px; color: var(--gf-muted, #637377); text-align: center; }
+.portal-page .fd-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 13.5px; color: #64748b; }
+.portal-page .fd-empty b { font-size: 15px; color: #0f172a; }
+.portal-page .fd-scale { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.portal-page .fd-scale__end { font-size: 13px; color: var(--gf-muted, #637377); }
+.portal-page .fd-scale__options { display: flex; flex-wrap: wrap; gap: 4px; }
+.portal-page .fd-scale__option { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 40px; padding: 6px 4px; border-radius: 8px; font-size: 13px; color: var(--gf-ink, #17262a); cursor: pointer; }
+.portal-page .fd-scale__option:hover { background: #f6f8f8; }
+.portal-page .fd-scale__option input { width: 20px; height: 20px; accent-color: var(--gf-teal, #0f6b5c); }
+.portal-page .fd-rating { display: flex; flex-wrap: wrap; gap: 2px; }
+.portal-page .fd-star { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; color: #cbd5e1; cursor: pointer; }
+.portal-page .fd-star:hover { background: #f6f8f8; }
+.portal-page .fd-star.is-on { color: #f59e0b; }
+.portal-page .fd-star.is-on svg { fill: currentColor; }
+.portal-page .fd-star:has(input:focus-visible) { outline: 3px solid var(--gf-teal, #0f6b5c); outline-offset: 1px; }
+.portal-page .gf-page .gf-drop:has(input:focus-visible) { outline: 3px solid var(--gf-teal, #0f6b5c); outline-offset: 2px; }
+
+/* Success dialog */
+.portal-page .fill-success { text-align: center; }
+.portal-page .fill-success__icon { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 50%; background: #dcfce7; color: #15803d; }
+.portal-page .fill-success .dash-dialog__actions { justify-content: center; }
+
+/* Responses page */
+.portal-page .fr-shell { display: grid; gap: 12px; max-width: 1100px; margin: 0 auto; }
+.portal-page .fr-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px 16px; padding: 16px 20px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; }
+.portal-page .fr-head__icon { margin: 0; }
+.portal-page .fr-head__desc { margin: 2px 0 0; font-size: 13px; color: #64748b; }
+.portal-page .fr-card { border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; overflow: hidden; }
+.portal-page .fr-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #e2e8f0; }
+.portal-page .fr-card__head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 700; color: #0f172a; }
+.portal-page .fr-count { padding: 3px 10px; border-radius: 999px; background: #f1f5f9; font-size: 12.5px; font-weight: 600; color: #334155; }
+.portal-page .fr-table-wrap { overflow-x: auto; }
+.portal-page .fr-table-wrap:focus-visible { outline: 3px solid #0f766e; outline-offset: -3px; }
+.portal-page .fr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.portal-page .fr-table th { position: sticky; top: 0; padding: 10px 14px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-size: 12px; font-weight: 700; letter-spacing: .02em; color: #475569; text-align: left; vertical-align: bottom; min-width: 140px; }
+.portal-page .fr-table td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; color: #1e293b; vertical-align: top; white-space: pre-line; overflow-wrap: anywhere; min-width: 140px; }
+.portal-page .fr-table tr:last-child td { border-bottom: 0; }
+.portal-page .fr-nowrap { white-space: nowrap !important; }
+.portal-page .fr-muted { color: #94a3b8; }
+.portal-page .fr-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 32px 20px; text-align: center; font-size: 13.5px; color: #64748b; }
+.portal-page .fr-empty svg { color: #94a3b8; }
+.portal-page .fr-empty b { font-size: 15px; color: #0f172a; }
+.portal-page .fr-note { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: #64748b; }
+
+@media (max-width: 639px) {
+  .portal-page .fr-head { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; }
+  .portal-page .fr-head .dash-btn { grid-column: 1 / -1; min-height: 44px; }
+  .portal-page .fr-card__head { padding: 12px 16px; }
+  .portal-page .fill-success .dash-dialog__actions { flex-direction: column-reverse; }
+}

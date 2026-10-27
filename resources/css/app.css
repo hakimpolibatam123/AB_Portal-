@@ -2,6 +2,9 @@
 @import "./module-pages.css";
 @import "./module-ui.css";
 @import "./gform.css";
+@import "./dashboard.css";
+@import "./form-editor.css";
+@import "./form-dinamis.css";
 @source "../../app/**/*.php";
 @source "../../config/**/*.php";
 @source "../../public/assets/js/*.js";
@@ -33,7 +36,7 @@
   .portal-card-title { @apply w-full self-start text-[11.7px] font-bold leading-snug text-slate-800 uppercase; }
   .portal-card-description { @apply mt-0.5 w-full text-[10.8px] font-medium leading-normal text-slate-500; }
   .card-icon { @apply mb-3 mt-1 flex size-12 shrink-0 self-center items-center justify-center rounded-xl leading-none; }
-  .card-badge { @apply absolute right-2.5 top-2.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide; }
+  .card-badge { @apply rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide; }
   .hero-pattern { background-image: radial-gradient(circle at 100% 100%, rgba(20, 184, 166, 0.15) 0%, transparent 60%), radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.08) 0%, transparent 50%); }
   .tone-emerald { @apply bg-emerald-50 text-emerald-700; }
   .tone-teal { @apply bg-teal-50 text-teal-700; }

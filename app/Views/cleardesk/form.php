@@ -17,10 +17,7 @@ $textInput = static fn (array $attributes): string => '<input' . attrs($attribut
                 ['label' => 'Waktu Inspeksi', 'labelFor' => 'inspectedAt', 'value' => '<input id="inspectedAt" name="started_at" readonly type="text" value="' . e($module['inspected_at']) . '">'],
             ],
             'required' => '<span class="gf-required-note">* WAJIB DIISI</span>',
-            'links' => [
-                '<a class="gf-link" href="' . e(url('/rekap/cleardesk')) . '">' . design_icon('file-text') . '<span>Lihat Rekap &amp; Unduh Laporan</span></a>',
-                '<a class="gf-link" href="' . e(url('/rekap/cleardesk')) . '">' . design_icon('history') . 'Lihat Riwayat</a>',
-            ],
+            'rekap' => url('/rekap/cleardesk'),
         ]) ?>
 
         <?= partial('gf-section', ['number' => 1, 'title' => 'Data Pemeriksaan Clear Desk & Screen', 'titleTag' => 'span', 'description' => 'Formulir Log Kepatuhan Keamanan Fisik IT • Standar ISO/IEC 27001:2022 A.7.7']) ?>
