@@ -11,8 +11,10 @@
 # Runtime data; retain directory placeholders
 /storage/logs/*
 /storage/sessions/*
+/storage/app/*
 !/storage/logs/.gitkeep
 !/storage/sessions/.gitkeep
+!/storage/app/.gitkeep
 
 # Logs and editor temporary files
 *.log

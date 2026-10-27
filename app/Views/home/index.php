@@ -16,19 +16,62 @@
         </div>
     </section>
 
-    <?php foreach ($groups as $categoryKey => $category): ?>
-    <section aria-labelledby="section-<?= e($categoryKey) ?>" class="portal-category space-y-3 <?= $categoryKey === 'daily' ? 'pt-2' : ($categoryKey === 'systems' ? 'pb-8 pt-4' : 'pt-4') ?>">
-        <h2 id="section-<?= e($categoryKey) ?>" class="flex items-center gap-2 text-[11.7px] font-bold uppercase tracking-wider text-slate-500">
-            <?= icon($category['icon'], 'size-3.5 text-slate-400') ?><?= e($category['title']) ?>
-        </h2>
-        <?php if ($category['cards'] === []): ?>
-            <p class="rounded-xl border border-dashed border-slate-300 p-6 text-base text-slate-600">Belum ada menu pada kategori ini.</p>
+    <?php if (!$editable): ?>
+    <p class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-[11.7px] leading-relaxed text-amber-900" role="note">
+        <?= card_icon('triangle-alert', 'mt-0.5 size-4 shrink-0') ?><span><strong class="font-semibold">Database belum siap.</strong> Kartu ditampilkan dari konfigurasi dan belum dapat diubah. Jalankan <code>php bin/migrate.php</code> lalu muat ulang halaman.</span>
+    </p>
+    <?php endif; ?>
+
+    <?php foreach ($groups as $index => $group):
+        $sectionId = 'section-' . e((string) ($group['id'] ?? $group['slug']));
+        $hiddenCount = count(array_filter($group['cards'], static fn (array $card): bool => $card['hidden']));
+        $isForms = $group['kind'] === 'forms';
+        $spacing = $index === 0 ? 'pt-2' : ($index === count($groups) - 1 ? 'pb-8 pt-4' : 'pt-4');
+    ?>
+    <section aria-labelledby="<?= $sectionId ?>" class="portal-category space-y-3 <?= $spacing ?>" data-section>
+        <div class="section-head">
+            <h2 id="<?= $sectionId ?>" class="flex items-center gap-2 text-[11.7px] font-bold uppercase tracking-wider text-slate-500">
+                <?= card_icon($group['icon'], 'size-3.5 text-slate-400') ?><?= e($group['title']) ?>
+            </h2>
+            <?php if ($editable && ($hiddenCount > 0 || $isForms)): ?>
+            <div class="section-actions">
+                <?php if ($hiddenCount > 0): ?>
+                <button type="button" class="section-textbtn" data-toggle-hidden aria-pressed="false" data-label-show="<?= e('Tampilkan ' . $hiddenCount . ' tersembunyi') ?>" data-label-hide="<?= e('Sembunyikan ' . $hiddenCount . ' tersembunyi') ?>">
+                    <?= card_icon('eye', 'size-3.5') ?><span data-toggle-label><?= e('Tampilkan ' . $hiddenCount . ' tersembunyi') ?></span>
+                </button>
+                <?php endif; ?>
+                <?php if ($isForms): ?>
+                <button type="button" class="dash-btn dash-btn--primary dash-btn--sm" data-open-add aria-haspopup="dialog"><?= card_icon('plus', 'size-4') ?>Tambah</button>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php if ($group['cards'] === []): ?>
+        <div class="section-empty">
+            <?= card_icon($isForms ? 'clipboard-list' : 'link', 'size-6 text-slate-400') ?>
+            <b><?= $isForms ? 'Belum ada form di bagian ini' : 'Belum ada tautan di bagian ini' ?></b>
+            <span><?= $isForms ? 'Buat form monitoring pertama untuk mulai mencatat.' : 'Tambahkan tautan lewat tombol + Tambah, tab Kategori & Tautan.' ?></span>
+            <?php if ($editable && $group['custom']): ?>
+            <form method="post" action="<?= e(url('/dashboard/sections/' . $group['id'] . '/delete')) ?>"><?= csrf_field() ?>
+                <button type="submit" class="section-textbtn section-textbtn--danger"><?= card_icon('trash-2', 'size-3.5') ?>Hapus kategori ini</button>
+            </form>
+            <?php endif; ?>
+        </div>
         <?php else: ?>
-        <div class="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 <?= $categoryKey === 'daily' ? 'lg:grid-cols-6' : 'lg:grid-cols-7' ?>">
-            <?php foreach ($category['cards'] as $card) { require BASE_PATH . '/app/Views/components/portal-card.php'; } ?>
+        <?php if ($hiddenCount === count($group['cards'])): ?>
+        <p class="section-empty section-empty--compact" data-all-hidden>Semua kartu di bagian ini disembunyikan.</p>
+        <?php endif; ?>
+        <div class="grid grid-cols-2 gap-3.5 sm:grid-cols-3 md:grid-cols-4 <?= $isForms ? 'lg:grid-cols-6' : 'lg:grid-cols-7' ?>">
+            <?php foreach ($group['cards'] as $card) { require BASE_PATH . '/app/Views/components/portal-card.php'; } ?>
         </div>
         <?php endif; ?>
     </section>
     <?php endforeach; ?>
     <noscript><p class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Aktifkan JavaScript untuk menggunakan menu portal.</p></noscript>
 </main>
+<?php if ($editable): ?>
+<?php require BASE_PATH . '/app/Views/components/dashboard-dialogs.php'; ?>
+<?php endif; ?>
+<?php if ($editable || $flash !== null): ?>
+<?= partial('toast', ['flash' => $flash]) ?>
+<?php endif; ?>

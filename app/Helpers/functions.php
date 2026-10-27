@@ -55,6 +55,14 @@ function redirect(string $path, int $status = 303): void
     header('Location: ' . url($path), true, $status);
 }
 
+/** JSON answer for requests sent by fetch() (dashboard dialogs). */
+function json_response(array $data, int $status = 200): void
+{
+    http_response_code($status);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP);
+}
+
 /** Hidden CSRF field for forms that POST (checked with App\Core\Auth::verifyCsrf()). */
 function csrf_field(): string
 {
@@ -113,6 +121,15 @@ function design_icon(string $name, string $class = '', array $attributes = []): 
     $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
         . ($paths[$name] ?? $paths['info']) . '</svg>';
     return '<span' . attrs(['class' => cx('rs-ic', $class), 'aria-hidden' => 'true'] + $attributes) . '>' . $svg . '</span>';
+}
+
+/** Dashboard card icon: a Lucide icon (app/Helpers/icons.php) drawn with the portal's 1.7 stroke. */
+function card_icon(string $name, string $class = 'size-6'): string
+{
+    static $paths = null;
+    $paths ??= require BASE_PATH . '/app/Helpers/icons.php';
+    return '<svg class="' . e($class) . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        . ($paths[$name] ?? $paths['clipboard-list']) . '</svg>';
 }
 
 /** Icon set of the portal dashboard and the pages on layouts/main.php (stroke 1.7, inline SVG). */

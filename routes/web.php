@@ -5,6 +5,7 @@ use App\Controllers\AccountController;
 use App\Controllers\AuthController;
 use App\Controllers\CctvController;
 use App\Controllers\ClearDeskController;
+use App\Controllers\DashboardController;
 use App\Controllers\AntrianOnlineController;
 use App\Controllers\HardwareServerController;
 use App\Controllers\KesesuaianUserController;
@@ -21,6 +22,7 @@ $clearDesk = new ClearDeskController();
 $hardwareServer = new HardwareServerController();
 $kesesuaianUser = new KesesuaianUserController();
 $antrianOnline = new AntrianOnlineController();
+$dashboard = new DashboardController();
 
 // Every route below needs a signed-in session unless it is marked public.
 $router->middleware(new RequireLogin());
@@ -32,6 +34,17 @@ $router->post('/logout', [$auth, 'logout']);
 $router->get('/', [$home, 'index']);
 $router->get('/password', [$account, 'password']);
 $router->get('/users', [$account, 'users']);
+
+// Dashboard categories and cards (every POST checks the CSRF token).
+$router->post('/dashboard/sections', [$dashboard, 'storeSection']);
+$router->post('/dashboard/sections/{id}/delete', [$dashboard, 'deleteSection']);
+$router->post('/dashboard/links', [$dashboard, 'storeLink']);
+$router->post('/dashboard/links/{id}', [$dashboard, 'updateLink']);
+$router->post('/dashboard/cards/{id}/hide', [$dashboard, 'hideCard']);
+$router->post('/dashboard/cards/{id}/show', [$dashboard, 'showCard']);
+$router->post('/dashboard/cards/{id}/move', [$dashboard, 'moveCard']);
+$router->post('/dashboard/cards/{id}/delete', [$dashboard, 'deleteCard']);
+$router->get('/files/{id}', [$dashboard, 'file']);
 
 $router->get('/form/suhu', [$suhu, 'form']);
 $router->get('/form/temperature', static fn () => redirect('/form/suhu', 302));

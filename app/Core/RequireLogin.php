@@ -11,6 +11,11 @@ final class RequireLogin
         if (Auth::check()) {
             return true;
         }
+        // A fetch() from an open page (e.g. a dashboard dialog) gets a status it can read, not a login page.
+        if (str_contains((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json')) {
+            json_response(['message' => 'Sesi berakhir. Muat ulang halaman lalu masuk kembali.'], 401);
+            return false;
+        }
         if ($method === 'GET') {
             Auth::rememberIntended($path . (($_SERVER['QUERY_STRING'] ?? '') !== '' ? '?' . $_SERVER['QUERY_STRING'] : ''));
         }

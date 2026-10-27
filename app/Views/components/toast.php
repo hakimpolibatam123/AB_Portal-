@@ -1,5 +1,5 @@
-<?php /** Optional: $flash (['title' => ..., 'description' => ...]) is shown once the page loads. */ ?>
-<div class="rs-toast" id="site-toast" role="status" aria-live="polite"<?= attrs(['data-flash-title' => $flash['title'] ?? null, 'data-flash-desc' => $flash['description'] ?? null]) ?>>
+<?php /** Optional: $flash (['title' => ..., 'description' => ..., 'variant' => 'success'|'info'|'error']) is shown once the page loads. */ ?>
+<div class="rs-toast" id="site-toast" role="status" aria-live="polite"<?= attrs(['data-flash-title' => $flash['title'] ?? null, 'data-flash-desc' => $flash['description'] ?? null, 'data-flash-variant' => $flash['variant'] ?? null]) ?>>
     <div class="rs-toast__box">
         <span class="rs-toast__icon" data-toast-icon><?= design_icon('circle-check') ?></span>
         <div class="flex-1 min-w-0">

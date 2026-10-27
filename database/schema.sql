@@ -68,3 +68,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     KEY idx_audit_logs_created_at (created_at),
     CONSTRAINT fk_audit_logs_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE RESTRICT ON UPDATE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Files in database/migrations/ that bin/migrate.php has applied, so each one runs once.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    migration VARCHAR(190) NOT NULL PRIMARY KEY,
+    applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

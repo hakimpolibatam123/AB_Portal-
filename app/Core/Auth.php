@@ -38,6 +38,13 @@ final class Auth
         return isset($_SESSION[self::USER]);
     }
 
+    /** @return array{id: ?int, name: string, email: string, dev_bypass?: bool}|null */
+    public static function user(): ?array
+    {
+        $user = $_SESSION[self::USER] ?? null;
+        return is_array($user) ? $user : null;
+    }
+
     /**
      * Development-only free login, on only when APP_ENV=local AND AUTH_DEV_BYPASS=true.
      * TODO(auth): HAPUS/NONAKTIFKAN sebelum dipakai di server RS.
