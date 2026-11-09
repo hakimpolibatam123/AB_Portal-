@@ -4,7 +4,8 @@ declare(strict_types=1);
 // Versioned database changes (database/migrations/, see App\Core\Migrator).
 // Usage:
 //   php bin/migrate.php            apply every pending migration (one new batch); on a new install it
-//                                  also creates the database if missing and runs the seeds
+//                                  also creates the database if missing and loads
+//                                  database/snapshot/data.json (or the seeds when that file is absent)
 //   php bin/migrate.php status     list applied and pending migrations
 //   php bin/migrate.php down       undo the last batch (asks to type YA; --yes skips the question)
 //   php bin/migrate.php seed       run database/seeds/*.php (each seed skips tables that already hold data)
@@ -12,6 +13,7 @@ declare(strict_types=1);
 
 use App\Core\Database;
 use App\Core\Migrator;
+use App\Services\DataSnapshot;
 
 if (PHP_SAPI !== 'cli') {
     exit(1);
@@ -57,14 +59,22 @@ try {
     switch ($command) {
         case 'up':
             echo "Migrasi database {$database}" . PHP_EOL;
-            // A database with no migration yet is a new install: fill the starting dashboard
-            // right after, so one command is enough. Existing databases are never re-seeded here.
+            // A database with no migration yet is a new install: load the committed snapshot, or the
+            // starting dashboard when there is none, so one command is enough. Existing databases
+            // never receive either here.
             $fresh = $migrator->applied() === [];
             $count = $migrator->up($report);
             echo $count === 0 ? 'Tidak ada migrasi baru.' . PHP_EOL : "Selesai: {$count} migrasi diterapkan." . PHP_EOL;
             if ($fresh && $count > 0) {
-                echo 'Database baru: mengisi data awal' . PHP_EOL;
-                $runSeeds();
+                $snapshot = BASE_PATH . DataSnapshot::FILE;
+                if (is_file($snapshot)) {
+                    echo 'Database baru: memuat data dari database/snapshot/data.json' . PHP_EOL;
+                    $loaded = DataSnapshot::import($pdo, (string) file_get_contents($snapshot));
+                    echo '  ' . count($loaded) . ' tabel, ' . array_sum($loaded) . ' baris dimuat.' . PHP_EOL;
+                } else {
+                    echo 'Database baru: mengisi data awal' . PHP_EOL;
+                    $runSeeds();
+                }
                 echo 'Langkah berikutnya: buat akun admin dengan php bin/create-admin.php' . PHP_EOL;
             }
             break;

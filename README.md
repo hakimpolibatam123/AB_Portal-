@@ -300,6 +300,16 @@ Prasyarat: PHP 8.2 atau lebih baru dengan `pdo_mysql` dan `mbstring`, serta `fil
 
 Ringkas untuk user baru setelah `git clone`: salin `.env.example` ke `.env` dan isi koneksi database, lalu `composer install`, `php bin/migrate.php`, `php bin/create-admin.php`. Pengaturan SMTP tidak ikut repo (kunci enkripsi `storage/keys/` di-ignore), jadi isi ulang di menu **Pengaturan Email**.
 
+### Data ikut repo (snapshot)
+
+`php bin/db-snapshot.php` (atau `composer db:snapshot`) menyalin data kerja dari database ke `database/snapshot/data.json`. Perintah ini hanya membaca database. Jalankan sebelum commit bila clone berikutnya harus membawa data terbaru. Pada instalasi baru, `php bin/migrate.php` memuat file ini menggantikan seed.
+
+- **Ikut:** form dan versinya, jadwal, laporan, dashboard, nomor urut laporan, data Aset IT (perangkat, servis, perpindahan, disposal, aktivitas), dan daftar lampiran. Daftar lengkapnya `DataSnapshot::TABLES` di `app/Services/DataSnapshot.php`; tabel hanya ikut bila disebut di sana.
+- **Tidak ikut:** `users` (hash password), `app_settings` (akun SMTP), `login_attempts` dan `audit_logs` (alamat IP), tanda sudah dibaca, penerima email pengingat, dan tabel lama `legacy_*`/`m1_*`.
+- **Berkas unggahan** (`storage/app/private`) tidak ada di repo, jadi lampiran dan foto tercatat tetapi berkasnya tidak bisa dibuka di clone.
+- **Bukan sinkronisasi:** snapshot hanya dimuat ke database baru. Database yang sudah berisi tidak disentuh; tabel yang sudah berisi membuat pemuatan ditolak.
+- **File ini berisi data kerja** (nama, IP dan MAC perangkat, isi laporan). Pastikan repositorinya private sebelum push.
+
 Migrasi ada di `database/migrations/` (`YYYY_MM_DD_NNNN_nama.php`, berisi fungsi `up` dan `down`) dan dicatat di `schema_migrations` dengan nomor batch. `database/schema.sql` adalah skema dasar yang dijalankan oleh migrasi `0001_baseline`; jangan mengimpornya sendiri lagi.
 
 Migrasi `2026_10_29_0003_dashboard` (B2) membuat tabel `forms`, `form_versions`, `form_schedules`, `form_schedule_dates`, `dashboard_sections`, `dashboard_cards`, `number_sequences`, dan kolom `attachments.field`. Tabel lama tidak dihapus, hanya diganti nama: `dashboard_sections`/`dashboard_cards` milestone M1 menjadi `m1_dashboard_sections`/`m1_dashboard_cards`, dan `forms`/`form_submissions` dari `schema.sql` menjadi `legacy_forms`/`legacy_form_submissions`. `down` menghapus tabel baru (semua kartu dan form yang dibuat sejak itu hilang) lalu mengembalikan nama tabel lama.

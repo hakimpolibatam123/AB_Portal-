@@ -18,6 +18,7 @@
   "scripts": {
     "db:check": "@php bin/db-check.php",
     "db:migrate": "@php bin/migrate.php",
+    "db:snapshot": "@php bin/db-snapshot.php",
     "admin:create": ["Composer\\Config::disableProcessTimeout", "@php bin/create-admin.php"],
     "test": "@php vendor/bin/phpunit"
   },
