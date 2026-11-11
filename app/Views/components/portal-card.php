@@ -45,7 +45,7 @@ $cardData = [
         <button type="button" class="card-link" data-module="<?= e((string) $card['id']) ?>" data-title="<?= e($card['title']) ?>" data-type="<?= $isLink ? 'external' : 'internal' ?>" aria-haspopup="dialog"><?= e($card['title']) ?></button>
         <?php endif; ?>
     </h3>
-    <p class="portal-card-description"><?= e($card['description']) ?><?php if ($isLink && $href === null): ?><span class="card-note">Alamat belum diatur</span><?php endif; ?></p>
+    <p class="<?= cx('portal-card-description', preg_match('#^(https?://|www\.)\S+$#i', trim((string) $card['description'])) === 1 ? 'is-url' : '') ?>"><?= e($card['description']) ?><?php if ($isLink && $href === null): ?><span class="card-note">Alamat belum diatur</span><?php endif; ?></p>
     <?php if (!$isLink): ?>
     <div class="card-foot">
         <?php if ($rekap !== null): ?>

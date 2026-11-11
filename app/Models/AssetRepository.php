@@ -32,6 +32,7 @@ final class AssetRepository
         $moves = array_map(static fn (array $r): array => self::json($r['data_json']), $this->pdo->query('SELECT data_json FROM asset_moves ORDER BY at, id' . $lock)->fetchAll());
         $services = array_map(static fn (array $r): array => self::json($r['data_json']), $this->pdo->query('SELECT data_json FROM asset_services ORDER BY created_at, id' . $lock)->fetchAll());
         $disposals = array_map(static fn (array $r): array => self::json($r['data_json']), $this->pdo->query('SELECT data_json FROM asset_disposals ORDER BY requested_at, id' . $lock)->fetchAll());
+        $handovers = array_map(static fn (array $r): array => self::json($r['data_json']), $this->pdo->query('SELECT data_json FROM asset_handovers ORDER BY created_at, id' . $lock)->fetchAll());
         $activity = array_map(static fn (array $r): array => ['id' => 'A' . $r['id'], 'deviceId' => $r['device_id'], 'type' => $r['type'], 'text' => $r['text'], 'at' => $r['at'], 'by' => $r['by_name']],
             $this->pdo->query('SELECT * FROM asset_activity ORDER BY id' . $lock)->fetchAll());
         $max = static function (array $ids): int {
@@ -45,8 +46,8 @@ final class AssetRepository
         };
         return [
             'v' => 1,
-            'seq' => ['srv' => $max(array_column($services, 'id')), 'dsp' => $max(array_column($disposals, 'id')), 'mv' => $max(array_column($moves, 'id')), 'act' => $max(array_column($activity, 'id'))],
-            'devices' => $devices, 'moves' => $moves, 'services' => $services, 'disposals' => $disposals, 'activity' => $activity,
+            'seq' => ['srv' => $max(array_column($services, 'id')), 'dsp' => $max(array_column($disposals, 'id')), 'mv' => $max(array_column($moves, 'id')), 'act' => $max(array_column($activity, 'id')), 'bast' => $max(array_column($handovers, 'id'))],
+            'devices' => $devices, 'moves' => $moves, 'services' => $services, 'disposals' => $disposals, 'handovers' => $handovers, 'activity' => $activity,
         ];
     }
 
@@ -81,6 +82,10 @@ final class AssetRepository
             ON DUPLICATE KEY UPDATE status = VALUES(status), data_json = VALUES(data_json)');
         foreach ($changes['disposals'] ?? [] as $r) {
             $disposal->execute([$r['id'], $r['deviceId'], $r['status'], self::encode($r), $r['requestedAt']]);
+        }
+        $handover = $this->pdo->prepare('INSERT INTO asset_handovers (id, data_json, created_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE data_json = VALUES(data_json)');
+        foreach ($changes['handovers'] ?? [] as $h) {
+            $handover->execute([$h['id'], self::encode($h), $h['createdAt']]);
         }
         $activity = $this->pdo->prepare('INSERT INTO asset_activity (device_id, type, text, at, by_name) VALUES (?, ?, ?, ?, ?)');
         foreach ($changes['activity'] ?? [] as $a) {

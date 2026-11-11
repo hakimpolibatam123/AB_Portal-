@@ -40,7 +40,9 @@
     { key: 'minipc', label: 'Mini PC', short: 'Mini PC', icon: 'cpu', prefix: 'MPC', net: true, spec: PC_SPEC },
     { key: 'laptop', label: 'Laptop', short: 'Laptop', icon: 'laptop', prefix: 'LTP', net: true, dhcp: true, spec: PC_SPEC },
     { key: 'monitor', label: 'Monitor', short: 'Monitor', icon: 'app-window', prefix: 'MON', net: false, spec: [
-      { key: 'size', label: 'Ukuran Layar', type: 'select', options: ['19 inch', '21.5 inch', '24 inch', '27 inch', '32 inch', '43 inch', '55 inch'] },
+      // Typed (any size), the common ones offered as suggestions; a bare number gets " inch" (aset-register.js).
+      { key: 'size', label: 'Ukuran Layar', type: 'text', unit: 'inch', inputmode: 'decimal', ph: 'Ketik ukuran, mis. 23.8', help: 'Ketik ukuran layar dalam inch, atau pilih dari saran.',
+        options: ['19 inch', '21.5 inch', '24 inch', '27 inch', '32 inch', '43 inch', '55 inch'] },
       { key: 'pairedWith', label: 'Terhubung ke Perangkat', ph: 'Barcode PC, mis. AB-BTN-PC-0001', mono: true, help: 'Opsional. Isi barcode PC/Mini PC yang memakai monitor ini.' }
     ] },
     { key: 'printer', label: 'Printer', short: 'Printer', icon: 'printer', prefix: 'PRN', net: 'optional', spec: [
@@ -110,7 +112,7 @@
     pending: { label: 'Menunggu Persetujuan', tone: 'warn' },
     approved: { label: 'Disetujui', tone: 'info' },
     disposed: { label: 'Dihapuskan', tone: 'dark' },
-    rejected: { label: 'Ditolak', tone: 'err' }
+    rejected: { label: 'Dibatalkan', tone: 'err' }
   };
   var DSP_REASONS = ['Rusak berat / tidak ekonomis diperbaiki', 'Usang / tidak didukung lagi', 'Diganti unit baru (upgrade)', 'Hilang', 'Lainnya'];
   var DSP_CONDITIONS = ['Rusak total, tidak berfungsi', 'Rusak sebagian', 'Berfungsi, namun usang', 'Hilang / tidak ditemukan'];
@@ -144,19 +146,15 @@
   }
   function pad(n, w) { return String(n).padStart(w || 4, '0'); }
   function me() { return (window.RS && window.RS.currentUser) ? window.RS.currentUser().name : 'IT botania'; }
-  // A location is its unit and room (Gedung / Lantai are no longer asked; older records may still have them).
-  function locKey(l) { return l ? [l.dept, l.room].join('|') : ''; }
+  // A location is its department / unit (Ruangan, Gedung and Lantai are no longer asked; older records may still have them).
+  function locKey(l) { return l ? String(l.dept || '') : ''; }
   function sameLoc(a, b) { return locKey(a) === locKey(b); }
+  /* MAC is free text; only a plain 12-hex-digit MAC (any separators) is written as 3C:D9:2B:1A:2F:4E. */
   function normMac(s) {
-    var hex = String(s || '').replace(/[^0-9a-f]/gi, '').toUpperCase();
-    if (hex.length !== 12) return String(s || '').trim().toUpperCase();
+    var raw = String(s || '').trim(), hex = raw.replace(/[^0-9a-f]/gi, '').toUpperCase();
+    if (hex.length !== 12 || !/^[0-9a-f:.\-\s]+$/i.test(raw)) return raw.toUpperCase();
     return hex.match(/.{2}/g).join(':');
   }
-  function validIp(s) {
-    var m = String(s || '').trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    return !!m && m.slice(1).every(function (x) { return +x >= 0 && +x <= 255 && String(+x) === x; });
-  }
-  function validMac(s) { return /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/.test(normMac(s)); }
 
 
   /* ---------------- persistence: the portal server ---------------- */
@@ -195,11 +193,22 @@
       });
     }, Promise.resolve()).then(function () { return out; });
   }
+  /* Import Perangkat: a filled template checked by the server; with save, its valid rows are stored. */
+  function importFile(file, save) {
+    var body = new FormData(); body.append('file', file); if (save) body.append('simpan', '1');
+    return fetch(API + '/registrasi/impor', { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'X-CSRF-Token': csrf() }, body: body })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (data) {
+          if (!r.ok) throw new Error(data.message || 'File tidak dapat diproses. Coba lagi.');
+          return data;
+        });
+      }, function () { throw new Error('Tidak dapat terhubung ke server. Periksa koneksi, lalu coba lagi.'); });
+  }
   /* Where an uploaded document opens (/berkas/{id}, signed-in only). */
   function fileUrl(f) { return f && f.id ? API.replace(/\/aset$/, '') + '/berkas/' + encodeURIComponent(f.id) : ''; }
 
   var S = null; // state
-  function empty() { return { v: 1, seq: { srv: 0, dsp: 0, mv: 0, act: 0 }, devices: {}, moves: [], services: [], disposals: [], activity: [] }; }
+  function empty() { return { v: 1, seq: { srv: 0, dsp: 0, mv: 0, act: 0, bast: 0 }, devices: {}, moves: [], services: [], disposals: [], handovers: [], activity: [] }; }
 
   function log(deviceId, type, text, at, by) {
     S.seq.act++;
@@ -379,61 +388,73 @@
     return S.services.filter(function (x) { return x.deviceId === deviceId && !svcClosed(x.status); })[0] || null;
   }
 
-  function requestDisposal(input, opt) {
+  /* Disposal in one step (no request / approval): the device is archived at once. An older request still open is
+     finished by this same record. */
+  function dispose(input, opt) {
     opt = opt || {};
     var d = S.devices[normId(input.deviceId)]; if (!d) throw new Error('Perangkat tidak ditemukan.');
     if (d.status === 'disposed') throw new Error('Perangkat sudah dihapuskan.');
-    if (openDisposal(d.id)) throw new Error('Perangkat ini sudah memiliki pengajuan disposal yang aktif.');
-    if (openService(d.id)) throw new Error('Selesaikan dulu laporan servis ' + openService(d.id).id + ' sebelum mengajukan disposal.');
+    if (openService(d.id)) throw new Error('Selesaikan dulu laporan servis ' + openService(d.id).id + ' sebelum disposal.');
     var at = opt.at || nowIso(), by = opt.by || me();
-    var year = new Date(at).getFullYear();
-    S.seq.dsp++;
-    var r = {
-      id: 'DSP-' + year + '-' + pad(S.seq.dsp), deviceId: d.id, deviceName: d.name, category: d.category, lastLocation: clone(d.location),
-      reason: input.reason, reasonDetail: input.reasonDetail || '', condition: input.condition, disposalDate: input.disposalDate || '',
-      docs: files(input.docs), status: 'pending', requestedBy: by, requestedAt: at, prevStatus: d.status,
-      approvedBy: '', approverRole: '', approvedAt: '', decisionNote: '', method: '', reference: '', disposedAt: ''
-    };
-    S.disposals.push(r);
-    d.status = 'disposal';
-    log(d.id, 'disposal', 'Pengajuan disposal ' + r.id + ' dibuat — ' + r.reason, at, by);
+    var r = openDisposal(d.id);
+    if (!r) {
+      S.seq.dsp++;
+      r = { id: 'DSP-' + new Date(at).getFullYear() + '-' + pad(S.seq.dsp), deviceId: d.id, deviceName: d.name, category: d.category, lastLocation: clone(d.location),
+        disposalDate: '', docs: [], requestedBy: by, requestedAt: at, prevStatus: d.status, approvedBy: '', approverRole: '', approvedAt: '', decisionNote: '' };
+      S.disposals.push(r);
+    }
+    r.reason = input.reason; r.reasonDetail = input.reasonDetail || ''; r.condition = input.condition;
+    r.status = 'disposed'; r.disposedAt = input.date || at.slice(0, 10); r.method = input.method || ''; r.reference = input.reference || '';
+    if (input.docs && input.docs.length) r.docs = (r.docs || []).concat(files(input.docs));
+    d.status = 'disposed'; d.disposedAt = r.disposedAt; d.disposalId = r.id; d.updatedAt = at; d.updatedBy = by;
+    log(d.id, 'disposal', 'Perangkat dihapuskan (' + r.method + ') — ' + r.reason + (r.reference ? ' — BA ' + r.reference : '') + '. Riwayat diarsipkan.', at, by);
+    return r;
+  }
+  /* Serah Terima: one berita acara for the devices; the receiver becomes their person in charge (AssetLedger::handover). */
+  function handover(input, opt) {
+    opt = opt || {};
+    var at = opt.at || nowIso(), by = opt.by || me();
+    var list = (input.deviceIds || []).map(function (id) { var d = S.devices[normId(id)]; if (!d) throw new Error('Perangkat tidak ditemukan.'); return d; });
+    if (!list.length) throw new Error('Pilih minimal satu perangkat.');
+    list.forEach(function (d) { if (['servis', 'disposal', 'disposed'].indexOf(d.status) !== -1) throw new Error(d.name + ' berstatus ' + STATUS[d.status].label + ', tidak dapat diserahterimakan.'); });
+    S.seq.bast = (S.seq.bast || 0) + 1;
+    var r = { id: 'BAST-' + at.slice(0, 4) + '-' + pad(S.seq.bast), date: input.date || at.slice(0, 10), fromName: input.fromName, fromRole: input.fromRole || '', toName: input.toName, toRole: input.toRole || '', toDept: input.toDept,
+      condition: input.condition, note: input.note || '', devices: list.map(function (d) { return { id: d.id, name: d.name, brand: d.brand || '', model: d.model || '', serial: d.serial || '' }; }),
+      signFrom: files(input.signFrom)[0] || null, signTo: files(input.signTo)[0] || null, createdAt: at, createdBy: by };
+    S.handovers.push(r);
+    list.forEach(function (d) {
+      var loc = { building: '', floor: '', dept: input.toDept, room: '' };
+      if (placed(d) && !sameLoc(d.location, loc)) move(d.id, { to: loc, reason: 'Serah terima', pic: input.toName, at: at, by: by });
+      else place(d.id, { location: placed(d) ? d.location : loc, pic: input.toName, at: at, by: by });
+      d.department = input.toDept; d.updatedAt = at; d.updatedBy = by;
+      log(d.id, 'handover', 'Serah terima ' + r.id + ': ' + input.fromName + ' → ' + input.toName + ' (' + input.toDept + ')', at, by);
+    });
+    return r;
+  }
+  function getHandover(id) { return (S.handovers || []).filter(function (x) { return x.id === id; })[0] || null; }
+  function signHandover(id, input, opt) {
+    opt = opt || {};
+    var r = getHandover(id); if (!r) throw new Error('Serah terima tidak ditemukan.');
+    var field = input.role === 'from' ? 'signFrom' : 'signTo';
+    if (r[field]) throw new Error('Tanda tangan pihak ini sudah ada.');
+    r[field] = files(input.file)[0] || null;
+    r.devices.forEach(function (d) { log(d.id, 'handover', 'Tanda tangan ' + (input.role === 'from' ? 'yang menyerahkan' : 'yang menerima') + ' ditambahkan pada ' + id, opt.at || nowIso(), opt.by || me()); });
     return r;
   }
   function getDisposal(id) { return S.disposals.filter(function (x) { return x.id === id; })[0] || null; }
   function openDisposal(deviceId) {
     return S.disposals.filter(function (x) { return x.deviceId === deviceId && (x.status === 'pending' || x.status === 'approved'); })[0] || null;
   }
-  function approveDisposal(id, input, opt) {
-    opt = opt || {};
-    var r = getDisposal(id); if (!r) throw new Error('Pengajuan tidak ditemukan.');
-    if (r.status !== 'pending') throw new Error('Pengajuan ini tidak menunggu persetujuan.');
-    var at = opt.at || nowIso();
-    r.status = 'approved'; r.approvedBy = input.approvedBy; r.approverRole = input.role || ''; r.approvedAt = at; r.decisionNote = input.note || '';
-    if (input.disposalDate) r.disposalDate = input.disposalDate;
-    log(r.deviceId, 'disposal', 'Disposal ' + r.id + ' disetujui oleh ' + r.approvedBy + (r.approverRole ? ' (' + r.approverRole + ')' : ''), at, opt.by);
-    return r;
-  }
+  /* Cancels an older request still open (the only kind left: new disposals are done in one step). */
   function rejectDisposal(id, input, opt) {
     opt = opt || {};
     var r = getDisposal(id); if (!r) throw new Error('Pengajuan tidak ditemukan.');
-    if (r.status !== 'pending') throw new Error('Pengajuan ini tidak menunggu persetujuan.');
+    if (r.status !== 'pending' && r.status !== 'approved') throw new Error('Pengajuan ini sudah selesai.');
     var at = opt.at || nowIso();
     r.status = 'rejected'; r.approvedBy = input.approvedBy; r.approverRole = input.role || ''; r.approvedAt = at; r.decisionNote = input.note || '';
     var d = S.devices[r.deviceId];
     if (d && d.status === 'disposal') d.status = r.prevStatus && r.prevStatus !== 'disposal' ? r.prevStatus : 'aktif';
-    log(r.deviceId, 'disposal', 'Disposal ' + r.id + ' ditolak oleh ' + r.approvedBy + (r.decisionNote ? ' — ' + r.decisionNote : ''), at, opt.by);
-    return r;
-  }
-  function completeDisposal(id, input, opt) {
-    opt = opt || {};
-    var r = getDisposal(id); if (!r) throw new Error('Pengajuan tidak ditemukan.');
-    if (r.status !== 'approved') throw new Error('Disposal hanya dapat dilaksanakan setelah disetujui.');
-    var at = opt.at || nowIso();
-    r.status = 'disposed'; r.disposedAt = input.date || at.slice(0, 10); r.method = input.method || ''; r.reference = input.reference || '';
-    if (input.docs && input.docs.length) r.docs = (r.docs || []).concat(files(input.docs));
-    var d = S.devices[r.deviceId];
-    if (d) { d.status = 'disposed'; d.disposedAt = r.disposedAt; d.disposalId = r.id; d.updatedAt = at; }
-    log(r.deviceId, 'disposal', 'Perangkat dihapuskan (' + r.method + ')' + (r.reference ? ' — BA ' + r.reference : '') + '. Riwayat diarsipkan.', at, opt.by);
+    log(r.deviceId, 'disposal', 'Pengajuan disposal ' + r.id + ' dibatalkan oleh ' + r.approvedBy + (r.decisionNote ? ' — ' + r.decisionNote : ''), at, opt.by);
     return r;
   }
 
@@ -484,13 +505,19 @@
     var where = [l.building, l.floor].filter(Boolean).join(', ');
     return [l.dept, l.room].filter(Boolean).join(' · ') + (where ? ' (' + where + ')' : '');
   }
+  /* A location as the pages show it: its department (an older room-only record shows its room). */
+  function deptText(l) { return (l && (l.dept || l.room)) || '—'; }
+  /* Where a device is: its placement, or its department from Registrasi when it was never placed. */
+  function whereIs(d) { return placed(d) ? d.location : { building: '', floor: '', dept: (d && d.department) || '', room: '' }; }
+  /* A service's location is recorded when it is reported; a report made before placement shows the device's department. */
+  function svcLoc(t) { var l = t.location; return l && (l.dept || l.room) ? l : whereIs(S.devices[t.deviceId]); }
 
 
   /* ---------------- public ---------------- */
   // Each operation answers at once from the page's copy and is queued (without the design's {at, by} options:
   // the server sets the time and the account); save() sends the queue and takes the server's state. A refused
   // save reloads the server's state, so the page never keeps a change that was not stored.
-  var ARITY = { register: 1, update: 2, place: 2, move: 2, addService: 1, updateService: 2, requestDisposal: 1, approveDisposal: 2, rejectDisposal: 2, completeDisposal: 2 };
+  var ARITY = { register: 1, update: 2, place: 2, move: 2, addService: 1, updateService: 2, dispose: 1, rejectDisposal: 2, handover: 1, signHandover: 2 };
   function queued(op, fn) {
     return function () {
       var args = clone(Array.prototype.slice.call(arguments, 0, ARITY[op]));
@@ -522,14 +549,14 @@
     CATEGORIES: CATEGORIES, CAT: CAT, BUILDINGS: BUILDINGS, FLOORS: FLOORS, DEPTS: DEPTS,
     STATUS: STATUS, SVC_STATUS: SVC_STATUS, svcClosed: svcClosed, endStatus: endStatus, dueIn: dueIn, deptNames: deptNames, kindOf: kindOf, kinds: kinds, upload: upload, fileUrl: fileUrl, SVC_TYPES: SVC_TYPES, DSP_STATUS: DSP_STATUS, DSP_REASONS: DSP_REASONS,
     DSP_CONDITIONS: DSP_CONDITIONS, DSP_METHODS: DSP_METHODS, MOVE_REASONS: MOVE_REASONS, TECHNICIANS: TECHNICIANS, VENDORS: VENDORS,
-    ready: ready, save: save, state: function () { return S; },
+    ready: ready, save: save, importFile: importFile, state: function () { return S; },
     register: queued('register', register), update: queued('update', update), move: queued('move', move),
     addService: queued('addService', addService), updateService: queued('updateService', updateService), openService: openService,
-    requestDisposal: queued('requestDisposal', requestDisposal), approveDisposal: queued('approveDisposal', approveDisposal),
-    rejectDisposal: queued('rejectDisposal', rejectDisposal), completeDisposal: queued('completeDisposal', completeDisposal),
+    dispose: queued('dispose', dispose), rejectDisposal: queued('rejectDisposal', rejectDisposal),
+    handover: queued('handover', handover), signHandover: queued('signHandover', signHandover), getHandover: getHandover,
     getDisposal: getDisposal, openDisposal: openDisposal,
     devices: devices, get: get, movesOf: movesOf, servicesOf: servicesOf, disposalsOf: disposalsOf, activityOf: activityOf,
     previousLocation: previousLocation, search: search, conflicts: conflicts, nextId: nextId, placed: placed, place: queued('place', place),
-    normId: normId, codeProblem: codeProblem, normMac: normMac, validIp: validIp, validMac: validMac, locText: locText, sameLoc: sameLoc, me: me
+    normId: normId, codeProblem: codeProblem, normMac: normMac, locText: locText, deptText: deptText, whereIs: whereIs, svcLoc: svcLoc, sameLoc: sameLoc, me: me
   };
 })();

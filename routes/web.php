@@ -80,10 +80,15 @@ $router->post('/form-dinamis/tanda-tangan', [$dynamicForm, 'saveSignature']);
 // Aset IT (IT Asset Management): menu, forms, recap; records as JSON and the operations of one submit.
 $router->get('/aset', [$asset, 'index']);
 $router->get('/aset/registrasi', [$asset, 'registrasi']);
+$router->get('/aset/registrasi/template', [$asset, 'importTemplate']);
+$router->post('/aset/registrasi/impor', [$asset, 'import']);
 $router->get('/aset/penempatan', [$asset, 'penempatan']);
 $router->get('/aset/lacak', [$asset, 'lacak']);
 $router->get('/aset/servis', [$asset, 'servis']);
 $router->get('/aset/disposal', [$asset, 'disposal']);
+$router->get('/aset/serah-terima', [$asset, 'serahTerima']);
+$router->get('/aset/serah-terima/pdf', [$asset, 'serahTerimaPdf']);
+$router->get('/aset/rekap-serah-terima', [$asset, 'rekapSerahTerima']);
 $router->get('/aset/rekap', [$asset, 'rekap']);
 $router->get('/aset/rekap-perangkat', [$asset, 'rekapPerangkat']);
 $router->get('/aset/rekap-perpindahan', [$asset, 'rekapPerpindahan']);

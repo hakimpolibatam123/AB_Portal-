@@ -30,6 +30,69 @@
 .as-pill--dark { background: #E3E7E6; color: #2E3B3E; }
 .as-pill--dark i { background: #2E3B3E; }
 
+/* Rekap page: stacked sections and its main tabs */
+.as-stack { display: flex; flex-direction: column; gap: 20px; }
+.as-stack[hidden], [data-panel][hidden] { display: none; }
+.as-tabs { display: flex; gap: 6px; padding: 6px; background: #fff; border: 1px solid var(--rs-line); border-radius: var(--rs-radius-lg); overflow-x: auto; scroll-margin-top: 80px; }
+.as-tabs button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: none; font: inherit; font-size: 14px; font-weight: 500; color: var(--rs-ink-2); white-space: nowrap; cursor: pointer; }
+.as-tabs button:hover { background: var(--rs-line-2); }
+.as-tabs button:focus-visible { outline: 2px solid var(--rs-teal-700); outline-offset: 1px; }
+.as-tabs button .rs-ic { font-size: 18px; }
+.as-tabs button span.as-n { font-size: 12px; color: var(--rs-muted); background: var(--rs-line-2); border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
+.as-tabs button[aria-selected="true"] { background: var(--rs-teal-700); color: #fff; font-weight: 600; }
+.as-tabs button[aria-selected="true"] span.as-n { background: rgba(255, 255, 255, .2); color: #fff; }
+/* A phone shows all three tabs at once: no icons, tighter text. */
+@media (max-width: 640px) {
+  .as-tabs { gap: 2px; padding: 4px; }
+  .as-tabs button { flex: 1 1 auto; gap: 5px; padding: 0 7px; font-size: 13px; }
+  .as-tabs button .rs-ic { display: none; }
+}
+
+/* Serah Terima: signature boxes and the signature window */
+.as-sigs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .as-sigs { grid-template-columns: minmax(0, 1fr); } }
+.as-sig__label { font-size: 13.5px; font-weight: 600; color: var(--rs-ink); margin-bottom: 6px; }
+.as-sig__box { position: relative; aspect-ratio: 9 / 4; border: 1px dashed #B7C7C3; border-radius: 10px; background: #fff; overflow: hidden; }
+.as-sig__pad { display: block; width: 100%; height: 100%; cursor: move; touch-action: none; }
+.as-sig__pad[hidden], .as-sig__empty[hidden], .as-sig__tools[hidden], .as-sig__hint[hidden] { display: none; }
+.as-sig__img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.as-sig__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 500; color: var(--rs-teal-700); cursor: pointer; }
+.as-sig__empty:hover { background: var(--rs-line-2); }
+.as-sig__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; font-size: 13px; color: var(--rs-ink-2); }
+.as-sig__tools label { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 140px; }
+.as-sig__tools input[type="range"] { flex: 1; min-width: 0; accent-color: var(--rs-teal-700); }
+.as-sig__hint { margin: 6px 0 0; font-size: 12.5px; color: var(--rs-muted); }
+.as-sig__name { margin: 8px 0 0; text-align: center; font-size: 13.5px; font-weight: 600; color: var(--rs-ink); }
+.as-sig__save { margin-top: 10px; }
+.as-sig-label { display: block; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+.as-sig-styles { margin-top: 14px; border: 1px solid var(--rs-line); border-radius: 8px; overflow: hidden; }
+.as-sig-style { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 6px 14px; cursor: pointer; border-top: 1px solid var(--rs-line); }
+.as-sig-style:first-child { border-top: 0; }
+.as-sig-style input { position: absolute; opacity: 0; }
+.as-sig-style .rs-ic { font-size: 18px; color: var(--rs-teal-700); visibility: hidden; }
+.as-sig-style span[data-preview] { font-size: 28px; line-height: 1.25; color: #16233f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.as-sig-style:has(input:checked) { background: #DFF7F1; }
+.as-sig-style:has(input:checked) .rs-ic { visibility: visible; }
+.as-sig-style:has(input:focus-visible) { outline: 2px solid var(--rs-teal-700); outline-offset: -2px; }
+.as-sig-draw { display: block; width: 100%; aspect-ratio: 9 / 4; border: 1px dashed #B7C7C3; border-radius: 8px; background: #fff; cursor: crosshair; touch-action: none; }
+.as-sig-tools { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.as-sig-inks { display: inline-flex; gap: 8px; }
+.as-sig-ink { width: 24px; height: 24px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px var(--rs-line); cursor: pointer; }
+.as-sig-ink[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--rs-teal-700); }
+.as-sig-drop { display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; }
+.as-sig-preview { display: block; max-width: 100%; max-height: 140px; margin: 14px auto 0; }
+.as-sig-preview[hidden] { display: none; }
+.as-sig-devices { margin-top: 12px; border: 1px solid var(--rs-line); border-radius: 8px; }
+
+/* Registrasi: Import Excel */
+.as-import-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.as-import-card p { margin: 2px 0 0; font-size: 13.5px; color: var(--rs-muted); }
+.as-import-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 16px; list-style: decimal; }
+.as-import-steps p { margin: 2px 0 10px; font-size: 13.5px; color: var(--rs-muted); }
+.as-import-sum { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 10px; }
+.as-import-table { max-height: 300px; overflow: auto; border: 1px solid var(--rs-line); border-radius: 8px; }
+.as-import-bad td { background: var(--rs-err-bg); color: var(--rs-err); }
+
 /* KPI tiles */
 .as-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
 .as-kpi { display: flex; align-items: flex-start; gap: 14px; text-align: left; background: #fff; border: 1px solid var(--rs-line); border-radius: var(--rs-radius-lg); padding: 16px 18px; font: inherit; color: inherit; text-decoration: none; min-width: 0; transition: border-color .15s, box-shadow .15s; }

@@ -141,7 +141,7 @@
     var c = AU.catOf(d), today = AU.today();
     var html = GF.section(1, 'Data Perangkat', 'Terisi otomatis dari barcode.') +
       GF.q({ name: 'devname', title: 'Nama Perangkat', badge: 'Otomatis', body: GF.ro(esc(d.name), AU.code(d.id) + ' · ' + esc(AU.catName(d)) + (d.brand ? ' · ' + esc(d.brand + ' ' + d.model) : '')) }) +
-      GF.q({ name: 'devloc', title: 'Lokasi Saat Ini', badge: 'Otomatis', body: GF.ro(esc(AS.locText(d.location))) });
+      GF.q({ name: 'devloc', title: 'Di Departemen', badge: 'Otomatis', body: GF.ro(esc(AS.deptText(AS.whereIs(d)))) });
     if (T) {
       var flow = ['reported', 'progress', 'parts', 'done'].map(function (k) { return k === T.status ? '<b class="is-now">' + esc(AS.SVC_STATUS[k].label) + '</b>' : '<span>' + esc(AS.SVC_STATUS[k].label) + '</span>'; }).join(ic('chevron-right'));
       html += GF.section(2, 'Perbarui Status Servis', 'Perangkat ini memiliki laporan servis yang belum selesai.', T.id) +
@@ -228,10 +228,10 @@
     GF.done(app, {
       title: wasUpdate ? 'Status servis diperbarui' : 'Laporan servis terkirim',
       text: t.id + ' — ' + d.name + '. ' + end,
-      html: GF.kv([['No. Tiket', AU.code(t.id), true], ['Perangkat', d.name + ' (' + d.id + ')'], ['Lokasi', AS.locText(t.location)], ['Jenis Servis', t.type], ['Masalah', t.problem],
+      html: GF.kv([['No. Tiket', AU.code(t.id), true], ['Perangkat', d.name + ' (' + d.id + ')'], ['Departemen', AS.deptText(AS.svcLoc(t))], ['Jenis Servis', t.type], ['Masalah', t.problem],
         ['Teknisi / Vendor', t.technician], ['Tenggat Vendor', t.dueDate ? AU.fmtDate(t.dueDate) : ''], ['Status', AU.svcPill(t.status), true], [t.status === 'rejected' ? 'Tanggal Ditolak' : 'Tanggal Selesai', t.completedAt ? AU.fmtDate(t.completedAt) : ''],
         ['Dokumen', AU.docsHtml(t.docs), true]]) +
-        (AS.svcClosed(t.status) && dev.status === 'rusak' ? '<div class="as-notice as-notice--warn" style="margin-top:16px">' + ic('triangle-alert') + '<div>Perangkat dinyatakan rusak. <a class="gf-link" href="disposal?barcode=' + encodeURIComponent(d.id) + '">Ajukan disposal</a></div></div>' : ''),
+        (AS.svcClosed(t.status) && dev.status === 'rusak' ? '<div class="as-notice as-notice--warn" style="margin-top:16px">' + ic('triangle-alert') + '<div>Perangkat dinyatakan rusak. <a class="gf-link" href="disposal?barcode=' + encodeURIComponent(d.id) + '">Disposal perangkat</a></div></div>' : ''),
       links: [{ id: 'again', label: 'Kirim laporan lain', icon: 'rotate-ccw', fn: render }, { href: AU.trackUrl(d.id), label: 'Lacak perangkat', icon: 'map-pin' }, { href: 'rekap-servis', label: 'Lihat rekap servis', icon: 'chart-column' }]
     });
   }

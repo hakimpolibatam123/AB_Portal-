@@ -6,15 +6,14 @@
  */
 $cards = [
     'Formulir Aset' => [
-        ['registrasi', 'Registrasi Perangkat', 'Daftarkan perangkat baru: pindai barcode, isi data dan spesifikasi, cetak label.', 'circle-plus', 'teal', 'rekap-perangkat'],
-        ['penempatan', 'Penempatan Perangkat', 'Tentukan lokasi dan penanggung jawab perangkat yang sudah terdaftar.', 'map-pin', 'sky', 'rekap-perpindahan'],
-        ['lacak', 'Lacak Perangkat', 'Lihat lokasi saat ini, riwayat perpindahan dan servis, lalu laporkan lokasi baru.', 'search', 'emerald', 'rekap-perpindahan'],
+        ['registrasi', 'Registrasi Perangkat', 'Daftarkan perangkat baru: pindai barcode, isi data dan spesifikasi, cetak label.', 'circle-plus', 'teal', 'rekap#perangkat'],
+        ['lacak', 'Penempatan & Lacak Perangkat', 'Tentukan atau pindahkan lokasi dan penanggung jawab, lihat riwayat perpindahan dan servis.', 'map-pin', 'sky', 'rekap-perpindahan'],
         ['servis', 'Servis & Pemeliharaan', 'Laporkan kerusakan atau pemeliharaan, perbarui progres hingga selesai.', 'wrench', 'amber', 'rekap-servis'],
-        ['disposal', 'Disposal Perangkat', 'Ajukan, setujui, dan laksanakan penghapusan perangkat. Riwayat tetap diarsipkan.', 'archive', 'rose', 'rekap-disposal'],
+        ['serah-terima', 'Serah Terima Perangkat', 'Buat berita acara serah terima dengan tanda tangan, lalu ekspor sebagai PDF.', 'clipboard-check', 'cyan', 'rekap-serah-terima'],
+        ['disposal', 'Disposal Perangkat', 'Hapuskan perangkat langsung setelah konfirmasi. Riwayat tetap diarsipkan.', 'archive', 'rose', 'rekap-disposal'],
     ],
     'Rekap & Laporan' => [
-        ['rekap', 'Rekap Global', 'Ringkasan seluruh aset: KPI, grafik kategori dan lokasi, daftar perangkat, servis, disposal, dan perpindahan.', 'chart-column', 'purple', null],
-        ['rekap-perangkat', 'Daftar Perangkat', 'Semua perangkat terdaftar per kategori dan lokasi, dengan filter dan ekspor CSV.', 'table-2', 'slate', null],
+        ['rekap', 'Rekap & Daftar Perangkat', 'Ringkasan aset, daftar semua perangkat dengan filter dan ekspor CSV, serta riwayatnya.', 'chart-column', 'purple', null],
         ['rekap-servis', 'Riwayat Servis', 'Semua laporan servis dan pemeliharaan dari formulir Servis.', 'history', 'orange', null],
     ],
 ];

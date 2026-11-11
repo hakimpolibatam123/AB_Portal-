@@ -1,27 +1,36 @@
 /*
- * IT Asset Management — Lihat Rekap: the global recap (summary, charts, tables), or one part of it on its own page
- * (<body data-rekap-view>: perangkat = charts + device list; servis / disposal / perpindahan = that history).
+ * IT Asset Management — Lihat Rekap: Rekap & Daftar Perangkat in three tabs (Ringkasan, Daftar Perangkat, Riwayat;
+ * #perangkat and #servis / #disposal / #perpindahan open them), or one history on its own page
+ * (<body data-rekap-view>: servis / disposal / perpindahan).
  */
 (function () {
   'use strict';
-  var AS = window.AS, AU = window.AU, esc = AU.esc, ic = AU.ic;
+  var AS = window.AS, AU = window.AU, GF = window.GF, esc = AU.esc, ic = AU.ic;
   var app = document.getElementById('as-app');
   var F = { q: '', cat: '', dept: '', building: '', status: '', archive: false, recent: false, sort: 'updated', page: 1 };
   var PAGE_SIZE = 12;
-  var locMode = 'dept', showAllLoc = false;
+  var showAllLoc = false, TAB = 'ringkasan';
   var VIEW = document.body.getAttribute('data-rekap-view') || '';
-  var OPS_VIEWS = ['servis', 'disposal', 'perpindahan'];
+  var OPS_VIEWS = ['servis', 'disposal', 'perpindahan', 'serah-terima'];
 
   AS.ready().then(function () { draw(); if (!VIEW) { jump(); window.addEventListener('hashchange', jump); } }).catch(AU.fail);
   var OPS = OPS_VIEWS.indexOf(VIEW) !== -1 ? VIEW : 'servis';
   function jump() {
     var h = location.hash.slice(1);
-    if (['servis', 'disposal', 'perpindahan'].indexOf(h) !== -1) { OPS = h; drawOps(); }
-    var el = h === 'perangkat' ? document.getElementById('as-devices') : (OPS === h ? document.getElementById('as-ops') : null);
-    if (el) setTimeout(function () { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+    if (OPS_VIEWS.indexOf(h) !== -1) { OPS = h; drawOps(); showTab('riwayat', true); }
+    else showTab(h === 'perangkat' ? 'perangkat' : 'ringkasan', true);
+  }
+  /* Shows one tab; the address keeps it, so coming back from a device opens the same tab. */
+  function showTab(t, keepUrl) {
+    TAB = t;
+    app.querySelectorAll('[data-panel]').forEach(function (p) { p.hidden = p.getAttribute('data-panel') !== t; });
+    app.querySelectorAll('.as-tabs [data-tab]').forEach(function (b) { b.setAttribute('aria-selected', String(b.getAttribute('data-tab') === t)); });
+    if (!keepUrl) history.replaceState(null, '', t === 'ringkasan' ? location.pathname : '#' + (t === 'riwayat' ? OPS : t));
   }
 
   function within(iso, days) { return iso && (Date.now() - new Date(iso).getTime()) <= days * 86400000; }
+  /* Where a device belongs: its placement, else the department from Registrasi. */
+  function deptOf(d) { return (d.location && d.location.dept) || d.department || 'Tanpa departemen'; }
 
   function draw() {
     var S = AS.state();
@@ -29,39 +38,42 @@
     var inService = active.filter(function (d) { return d.status === 'servis'; }).length;
     var waitParts = S.services.filter(function (t) { return t.status === 'parts'; }).length;
     var inDisposal = active.filter(function (d) { return d.status === 'disposal'; }).length;
-    var pendingApproval = S.disposals.filter(function (r) { return r.status === 'pending'; }).length;
     var recentAdded = active.filter(function (d) { return within(d.createdAt, 30); }).length;
     var recentMoved = S.moves.filter(function (m) { return within(m.at, 30); }).length;
-    var depts = {}; active.forEach(function (d) { depts[d.location.dept] = 1; });
+    var disposed = S.disposals.filter(function (r) { return r.status === 'disposed'; }).length;
+    var depts = {}; active.forEach(function (d) { depts[deptOf(d)] = 1; });
+    var tab = function (key, icon, label, n) { return '<button type="button" role="tab" data-tab="' + key + '" aria-selected="false">' + ic(icon) + label + (n === null ? '' : ' <span class="as-n">' + n + '</span>') + '</button>'; };
+    var ops = '<section class="rs-card" id="as-ops"><div class="rs-card__head"><div><h2>' + ic('history') + 'Riwayat Operasional</h2><p>Laporan servis, disposal, dan perpindahan perangkat.</p></div>' +
+      '<div class="rs-actions"><button type="button" class="rs-btn rs-btn--ghost rs-btn--sm2" data-opsexport>' + ic('download') + 'Export CSV</button></div></div>' +
+      '<div class="as-subtabs" role="tablist" aria-label="Riwayat operasional">' +
+      '<button type="button" role="tab" data-ops="servis">' + ic('wrench') + 'Laporan Servis <span class="as-n">' + S.services.length + '</span></button>' +
+      '<button type="button" role="tab" data-ops="disposal">' + ic('archive') + 'Disposal <span class="as-n">' + S.disposals.length + '</span></button>' +
+      '<button type="button" role="tab" data-ops="perpindahan">' + ic('arrow-right-left') + 'Perpindahan <span class="as-n">' + S.moves.length + '</span></button>' +
+      '<button type="button" role="tab" data-ops="serah-terima">' + ic('file-text') + 'Serah Terima <span class="as-n">' + S.handovers.length + '</span></button></div>' +
+      '<div data-ops-body role="tabpanel"></div></section>';
 
-    app.innerHTML =
-      '<div style="display:flex;flex-direction:column;gap:20px">' +
+    app.innerHTML = '<div class="as-stack">' + (VIEW ? ops :
       '<section class="as-kpis" aria-label="Ringkasan aset">' +
-      kpi('all', 'hard-drive', '', 'Total Perangkat Aktif', active.length, Object.keys(depts).length + ' unit kerja · ' + S.disposals.filter(function (r) { return r.status === 'disposed'; }).length + ' diarsipkan') +
+      kpi('all', 'hard-drive', '', 'Total Perangkat Aktif', active.length, Object.keys(depts).length + ' departemen') +
       kpi('servis', 'wrench', 'info', 'Sedang Diservis', inService, waitParts ? waitParts + ' menunggu suku cadang' : 'Tidak ada yang menunggu suku cadang') +
-      kpi('disposal', 'archive', 'warn', 'Proses Disposal', inDisposal, pendingApproval + ' menunggu persetujuan') +
+      kpi('disposed', 'archive', 'warn', 'Sudah Dihapuskan', disposed, inDisposal ? inDisposal + ' pengajuan lama belum selesai' : 'Tersimpan sebagai arsip') +
       kpi('recent', 'circle-plus', 'muted', 'Baru Ditambahkan', recentAdded, '30 hari terakhir · ' + recentMoved + ' perpindahan') +
       '</section>' +
+      '<div class="as-tabs" role="tablist" aria-label="Isi rekap">' + tab('ringkasan', 'layout-grid', 'Ringkasan', null) + tab('perangkat', 'list', 'Daftar Perangkat', active.length) + tab('riwayat', 'history', 'Riwayat', S.services.length + S.disposals.length + S.moves.length + S.handovers.length) + '</div>' +
+      '<div class="as-stack" data-panel="ringkasan" role="tabpanel">' +
       '<div class="as-grid-2">' +
-      '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('chart-column') + 'Perangkat per Kategori</h2><p>Klik kategori untuk memfilter tabel.</p></div></div><div class="rs-card__body">' + catBars(active) + '</div></section>' +
-      '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('map-pin') + 'Perangkat per Lokasi</h2><p>Sebaran perangkat aktif.</p></div>' +
-      '</div>' +
+      '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('chart-column') + 'Perangkat per Kategori</h2><p>Klik kategori untuk melihat perangkatnya.</p></div><button type="button" class="as-linkbtn" data-tab="perangkat">Lihat semua</button></div><div class="rs-card__body">' + catBars(active) + '</div></section>' +
+      '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('map-pin') + 'Perangkat per Departemen</h2><p>Klik departemen untuk melihat perangkatnya.</p></div></div>' +
       '<div class="rs-card__body" data-locbars>' + locBars(active) + '</div></section>' +
       '</div>' +
       '<div class="as-grid-2">' +
       '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('circle-plus') + 'Baru Ditambahkan</h2></div><a class="as-linkbtn" href="registrasi">Registrasi perangkat</a></div>' + recentAddedList(active) + '</section>' +
       '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('arrow-right-left') + 'Baru Dipindahkan</h2></div><a class="as-linkbtn" href="lacak">Lacak perangkat</a></div>' + recentMovedList(S) + '</section>' +
-      '</div>' +
-      '<section class="rs-card" id="as-devices"><div class="rs-card__head"><div><h2>' + ic('list') + 'Daftar Perangkat</h2><p data-count class="rs-count"></p></div>' +
-      '<div class="rs-actions"><button type="button" class="rs-btn rs-btn--ghost rs-btn--sm2" data-export>' + ic('download') + 'Export CSV</button></div></div>' +
-      toolbar() + '<div class="as-chipbar" data-chips hidden></div><div data-table></div></section>' +
-      '<section class="rs-card" id="as-ops"><div class="rs-card__head"><div><h2>' + ic('history') + 'Riwayat Operasional</h2><p>Laporan servis, pengajuan disposal, dan perpindahan perangkat.</p></div>' +
-      '<div class="rs-actions"><button type="button" class="rs-btn rs-btn--ghost rs-btn--sm2" data-opsexport>' + ic('download') + 'Export CSV</button></div></div>' +
-      '<div class="as-subtabs" role="tablist" aria-label="Riwayat operasional">' +
-      '<button type="button" role="tab" data-ops="servis">' + ic('wrench') + 'Laporan Servis <span class="as-n">' + S.services.length + '</span></button>' +
-      '<button type="button" role="tab" data-ops="disposal">' + ic('archive') + 'Pengajuan Disposal <span class="as-n">' + S.disposals.length + '</span></button>' +
-      '<button type="button" role="tab" data-ops="perpindahan">' + ic('arrow-right-left') + 'Perpindahan <span class="as-n">' + S.moves.length + '</span></button></div>' +
-      '<div data-ops-body role="tabpanel"></div></section>' +
+      '</div></div>' +
+      '<div data-panel="perangkat" role="tabpanel" hidden><section class="rs-card" id="as-devices"><div class="rs-card__head"><div><h2>' + ic('list') + 'Daftar Perangkat</h2><p data-count class="rs-count"></p></div>' +
+      '<div class="rs-actions"><button type="button" class="rs-btn rs-btn--primary rs-btn--sm2" data-scancheck>' + ic('scan-line') + 'Scan Barcode</button><button type="button" class="rs-btn rs-btn--ghost rs-btn--sm2" data-export>' + ic('download') + 'Export CSV</button></div></div>' +
+      toolbar() + '<div class="as-chipbar" data-chips hidden></div><div data-table></div></section></div>' +
+      '<div data-panel="riwayat" role="tabpanel" hidden>' + ops + '</div>') +
       '</div>';
     if (VIEW) keepView();
     AU.render(app);
@@ -69,21 +81,15 @@
     drawTable(); drawOps();
   }
 
-  /* A recap of one part: perangkat keeps the two charts and the device list; a history keeps only its own tab. */
+  /* A recap of one history on its own page: no tabs of the other histories, and its own title. */
   function keepView() {
-    var root = app.firstElementChild, charts = root.querySelector('.as-grid-2');
-    Array.prototype.slice.call(root.children).forEach(function (el) {
-      var keep = VIEW === 'perangkat' ? (el === charts || el.id === 'as-devices') : el.id === 'as-ops';
-      if (!keep) el.remove();
-    });
-    var ops = root.querySelector('#as-ops');
-    if (ops) {
-      ops.querySelector('.as-subtabs').remove();
-      var titles = { servis: ['wrench', 'Riwayat Servis', 'Semua laporan servis dan pemeliharaan, terbaru dulu.'],
-        disposal: ['archive', 'Riwayat Disposal', 'Semua pengajuan, persetujuan, dan pelaksanaan disposal.'],
-        perpindahan: ['arrow-right-left', 'Riwayat Penempatan & Perpindahan', 'Semua perpindahan lokasi perangkat, terbaru dulu.'] }[VIEW];
-      ops.querySelector('.rs-card__head > div').innerHTML = '<h2>' + ic(titles[0]) + esc(titles[1]) + '</h2><p>' + esc(titles[2]) + '</p>';
-    }
+    var ops = app.querySelector('#as-ops');
+    ops.querySelector('.as-subtabs').remove();
+    var titles = { servis: ['wrench', 'Riwayat Servis', 'Semua laporan servis dan pemeliharaan, terbaru dulu.'],
+      disposal: ['archive', 'Riwayat Disposal', 'Semua perangkat yang sudah dihapuskan, beserta alasan dan metodenya.'],
+      perpindahan: ['arrow-right-left', 'Riwayat Penempatan & Perpindahan', 'Semua perpindahan lokasi perangkat, terbaru dulu.'],
+      'serah-terima': ['file-text', 'Riwayat Serah Terima', 'Semua berita acara serah terima, terbaru dulu.'] }[VIEW];
+    ops.querySelector('.rs-card__head > div').innerHTML = '<h2>' + ic(titles[0]) + esc(titles[1]) + '</h2><p>' + esc(titles[2]) + '</p>';
   }
 
   function opsRows() {
@@ -93,22 +99,33 @@
     if (OPS === 'servis') return { head: ['No. Tiket', 'Perangkat', 'Status', 'Lokasi', 'Jenis & Masalah', 'Dilaporkan', 'Teknisi / Vendor', 'Tenggat Vendor', 'Selesai / Ditolak', 'Dokumen'],
       csvHead: ['No. Tiket', 'ID Aset', 'Nama Perangkat', 'Lokasi', 'Jenis Servis', 'Masalah', 'Dilaporkan', 'Teknisi / Vendor', 'Tenggat Vendor', 'Status', 'Selesai / Ditolak', 'Dokumen'],
       rows: S.services.slice().sort(by('createdAt')).map(function (t) {
-        var docs = t.docs || [];
+        var docs = t.docs || [], loc = AS.svcLoc(t);
         return { href: 'servis?barcode=' + encodeURIComponent(t.deviceId), date: String(t.reportDate || '').slice(0, 10), st: t.status,
-          search: [t.id, t.deviceId, t.deviceName, t.type, t.problem, t.technician, AS.locText(t.location)].join(' '),
-          csv: [t.id, t.deviceId, t.deviceName, AS.locText(t.location), t.type, t.problem, t.reportDate, t.technician, t.dueDate || '', AS.SVC_STATUS[t.status].label, t.completedAt, docs.map(function (f) { return f.name; }).join('; ')],
+          search: [t.id, t.deviceId, t.deviceName, t.type, t.problem, t.technician, AS.locText(loc)].join(' '),
+          csv: [t.id, t.deviceId, t.deviceName, AS.locText(loc), t.type, t.problem, t.reportDate, t.technician, t.dueDate || '', AS.SVC_STATUS[t.status].label, t.completedAt, docs.map(function (f) { return f.name; }).join('; ')],
           html: ['<span class="as-code">' + esc(t.id) + '</span>', '<span class="as-name"><b>' + esc(t.deviceName) + '</b><small>' + esc(t.deviceId) + '</small></span>', AU.svcPill(t.status),
-            AU.locHtml(t.location), '<span class="as-name"><b style="font-weight:500">' + esc(t.type) + '</b><small class="as-clip">' + esc(t.problem) + '</small></span>', esc(AU.fmtDate(t.reportDate)), esc(t.technician),
+            AU.locHtml(loc), '<span class="as-name"><b style="font-weight:500">' + esc(t.type) + '</b><small class="as-clip">' + esc(t.problem) + '</small></span>', esc(AU.fmtDate(t.reportDate)), esc(t.technician),
             t.dueDate ? '<span class="as-name"><span>' + esc(AU.fmtDate(t.dueDate)) + '</span>' + (AS.svcClosed(t.status) ? '' : '<small>' + AU.dueBadge(t) + '</small>') + '</span>' : '<span class="rs-muted">—</span>',
             t.completedAt ? esc(AU.fmtDate(t.completedAt)) : '<span class="rs-muted">—</span>', docs.length ? AU.docsHtml(docs) : '<span class="rs-muted">—</span>'] };
       }) };
-    if (OPS === 'disposal') return { head: ['No. Pengajuan', 'Perangkat', 'Lokasi Terakhir', 'Alasan & Kondisi', 'Diajukan', 'Disetujui Oleh', 'Status', 'Tgl. Disposal'],
+    if (OPS === 'serah-terima') return { head: ['No. Dokumen', 'Tanggal', 'Perangkat', 'Yang Menyerahkan', 'Yang Menerima', 'Departemen', 'Tanda Tangan', 'PDF'],
+      csvHead: ['No. Dokumen', 'Tanggal', 'ID Aset', 'Perangkat', 'Yang Menyerahkan', 'Yang Menerima', 'Departemen', 'Kondisi', 'Tanda Tangan'],
+      rows: S.handovers.slice().sort(by('createdAt')).map(function (h) {
+        var names = h.devices.map(function (d) { return d.name; }).join(', '), signed = (h.signFrom ? 1 : 0) + (h.signTo ? 1 : 0);
+        return { href: 'serah-terima?id=' + encodeURIComponent(h.id), date: h.date, st: '',
+          search: [h.id, h.fromName, h.toName, h.toDept, names, h.devices.map(function (d) { return d.id; }).join(' ')].join(' '),
+          csv: [h.id, h.date, h.devices.map(function (d) { return d.id; }).join('; '), names, h.fromName, h.toName, h.toDept, h.condition, signed + ' dari 2'],
+          html: ['<span class="as-code">' + esc(h.id) + '</span>', esc(AU.fmtDate(h.date)), '<span class="as-name"><b>' + esc(h.devices[0] ? h.devices[0].name : '') + '</b>' + (h.devices.length > 1 ? '<small>dan ' + (h.devices.length - 1) + ' perangkat lain</small>' : '') + '</span>',
+            esc(h.fromName), esc(h.toName), esc(h.toDept), signed === 2 ? AU.pill({ tone: 'ok', label: 'Lengkap' }) : AU.pill({ tone: 'warn', label: signed + ' dari 2' }),
+            '<a class="as-iconbtn" href="serah-terima/pdf?id=' + encodeURIComponent(h.id) + '" aria-label="Unduh PDF ' + esc(h.id) + '" title="Unduh PDF">' + ic('download') + '</a>'] };
+      }) };
+    if (OPS === 'disposal') return { head: ['No. Disposal', 'Perangkat', 'Lokasi Terakhir', 'Alasan & Kondisi', 'Dicatat', 'Oleh', 'Status', 'Tgl. Disposal'],
       rows: S.disposals.slice().sort(by('requestedAt')).map(function (r) {
         return { href: 'disposal?barcode=' + encodeURIComponent(r.deviceId), date: localDate(r.requestedAt), st: r.status,
-          search: [r.id, r.deviceId, r.deviceName, r.reason, r.condition, r.approvedBy, AS.locText(r.lastLocation)].join(' '), csv: [r.id, r.deviceId, r.deviceName, AS.locText(r.lastLocation), r.reason, r.condition, AU.fmtDate(r.requestedAt), r.approvedBy, AS.DSP_STATUS[r.status].label, r.disposedAt || r.disposalDate],
+          search: [r.id, r.deviceId, r.deviceName, r.reason, r.condition, r.requestedBy, r.approvedBy, AS.locText(r.lastLocation)].join(' '), csv: [r.id, r.deviceId, r.deviceName, AS.locText(r.lastLocation), r.reason, r.condition, AU.fmtDate(r.requestedAt), r.approvedBy || r.requestedBy, AS.DSP_STATUS[r.status].label, r.disposedAt || r.disposalDate],
           html: ['<span class="as-code">' + esc(r.id) + '</span>', '<span class="as-name"><b>' + esc(r.deviceName) + '</b><small>' + esc(r.deviceId) + '</small></span>', AU.locHtml(r.lastLocation),
             '<span class="as-name"><b style="font-weight:500">' + esc(r.reason) + '</b><small>' + esc(r.condition) + '</small></span>', esc(AU.fmtDate(r.requestedAt)),
-            r.approvedBy ? esc((r.status === 'rejected' ? 'Ditolak: ' : '') + r.approvedBy) : '<span class="rs-muted">—</span>', AU.dspPill(r.status),
+            esc((r.status === 'rejected' ? 'Dibatalkan: ' : '') + (r.approvedBy || r.requestedBy)), AU.dspPill(r.status),
             r.disposedAt ? esc(AU.fmtDate(r.disposedAt)) : r.disposalDate ? esc(AU.fmtDate(r.disposalDate)) + ' <small class="rs-muted">(rencana)</small>' : '<span class="rs-muted">—</span>'] };
       }) };
     return { head: ['Perangkat', 'Lokasi Sebelumnya', 'Lokasi Baru', 'Tanggal & Waktu', 'Diperbarui Oleh', 'Alasan'],
@@ -182,9 +199,10 @@
     AU.render(box);
   }
 
+  function kpiOn(key) { return key === 'recent' ? F.recent : key !== 'all' && F.status === key; }
   function kpi(key, icon, tone, label, value, sub) {
-    var on = (key === 'servis' && F.status === 'servis') || (key === 'disposal' && F.status === 'disposal') || (key === 'recent' && F.recent);
-    return '<button type="button" class="as-kpi" data-kpi="' + key + '" aria-pressed="' + on + '"><span class="as-tile' + (tone ? ' as-tile--' + tone : '') + '">' + ic(icon) + '</span>' +
+    var on = kpiOn(key);
+    return '<button type="button" class="as-kpi" data-kpi="' + key + '" aria-pressed="' + on + '" title="Klik untuk melihat daftarnya"><span class="as-tile' + (tone ? ' as-tile--' + tone : '') + '">' + ic(icon) + '</span>' +
       '<span class="as-kpi__body"><span class="as-kpi__label">' + esc(label) + '</span><span class="as-kpi__value">' + value + '</span><span class="as-kpi__sub">' + esc(sub) + '</span></span></button>';
   }
   function bars(rows, key) {
@@ -200,18 +218,18 @@
       .filter(function (r) { return r.n; }).sort(function (a, b) { return b.n - a.n; }), 'fcat');
   }
   function locBars(list) {
-    var cnt = {}; list.forEach(function (d) { var k = d.location[locMode] || 'Belum ditempatkan'; cnt[k] = (cnt[k] || 0) + 1; });
+    var cnt = {}; list.forEach(function (d) { var k = deptOf(d); cnt[k] = (cnt[k] || 0) + 1; });
     var rows = Object.keys(cnt).map(function (k) { return { key: k, label: k, n: cnt[k] }; }).sort(function (a, b) { return b.n - a.n; });
     var top = showAllLoc ? rows : rows.slice(0, 8);
     if (!showAllLoc && rows.length > 8) top.push({ key: '', label: 'Lainnya (' + (rows.length - 8) + ' unit)', n: rows.slice(8).reduce(function (s, r) { return s + r.n; }, 0) });
-    return bars(top, 'f' + locMode);
+    return bars(top, 'fdept');
   }
   function recentAddedList(list) {
     var rows = list.slice().sort(function (a, b) { return String(b.createdAt).localeCompare(a.createdAt); }).slice(0, 5);
     if (!rows.length) return '<p class="as-empty-inline">Belum ada perangkat.</p>';
     return '<ul class="as-list">' + rows.map(function (d) {
       return '<li><a class="as-list__item" href="' + AU.trackUrl(d.id) + '"><span class="as-tile as-tile--sm">' + ic(AU.catOf(d).icon) + '</span>' +
-        '<span class="as-list__text"><b>' + esc(d.name) + '</b><small>' + esc(d.id) + ' · ' + esc(d.location.dept) + '</small></span>' +
+        '<span class="as-list__text"><b>' + esc(d.name) + '</b><small>' + esc(d.id) + ' · ' + esc(deptOf(d)) + '</small></span>' +
         '<span class="as-list__meta">' + esc(AU.ago(d.createdAt)) + '</span></a></li>';
     }).join('') + '</ul>';
   }
@@ -221,17 +239,22 @@
     return '<ul class="as-list">' + rows.map(function (m) {
       var d = AS.get(m.deviceId) || { name: m.deviceId, category: 'other' };
       return '<li><a class="as-list__item" href="' + AU.trackUrl(m.deviceId) + '"><span class="as-tile as-tile--sm">' + ic(AU.catOf(d).icon) + '</span>' +
-        '<span class="as-list__text"><b>' + esc(d.name) + '</b><small class="as-move">' + esc(m.from.dept) + ' ' + ic('arrow-right') + ' ' + esc(m.to.dept + ' · ' + m.to.room) + '</small></span>' +
+        '<span class="as-list__text"><b>' + esc(d.name) + '</b><small class="as-move">' + esc(m.from.dept || m.from.room) + ' ' + ic('arrow-right') + ' ' + esc(m.to.dept || m.to.room) + '</small></span>' +
         '<span class="as-list__meta">' + esc(AU.ago(m.at)) + '<br>' + esc(m.by.split(' (')[0]) + '</span></a></li>';
     }).join('') + '</ul>';
   }
 
+  /* Only the departments that have a device, so a filter never comes up empty. */
+  function deptOptions() {
+    var set = {}; AS.devices({ includeDisposed: true }).forEach(function (d) { set[deptOf(d)] = 1; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b, 'id'); });
+  }
   function toolbar() {
     var opt = function (list, cur, all) { return '<option value="">' + all + '</option>' + list.map(function (o) { var v = o.value || o, l = o.label || o; return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join(''); };
     return '<div class="as-toolbar">' +
-      '<div class="as-search">' + ic('search') + '<input class="pm-input" type="search" data-f="q" placeholder="Cari barcode, nama, serial, IP, ruangan…" aria-label="Cari perangkat" value="' + esc(F.q) + '"></div>' +
+      '<div class="as-search">' + ic('search') + '<input class="pm-input" type="search" data-f="q" placeholder="Cari nama, barcode, serial, IP…" aria-label="Cari perangkat, juga menurut departemen dan penanggung jawab" value="' + esc(F.q) + '"></div>' +
       '<select class="pm-input pm-input--sm" data-f="cat" aria-label="Kategori">' + opt(AS.CATEGORIES.map(function (c) { return { value: c.key, label: c.label }; }), F.cat, 'Semua kategori') + '</select>' +
-      '<select class="pm-input pm-input--sm" data-f="dept" aria-label="Unit kerja">' + opt(AS.deptNames(), F.dept, 'Semua unit kerja') + '</select>' +
+      '<select class="pm-input pm-input--sm" data-f="dept" aria-label="Departemen">' + opt(deptOptions(), F.dept, 'Semua departemen') + '</select>' +
       '<select class="pm-input pm-input--sm" data-f="status" aria-label="Status">' + opt(Object.keys(AS.STATUS).map(function (k) { return { value: k, label: AS.STATUS[k].label }; }), F.status, 'Semua status') + '</select>' +
       '<select class="pm-input pm-input--sm" data-f="sort" aria-label="Urutkan"><option value="updated"' + (F.sort === 'updated' ? ' selected' : '') + '>Terakhir diperbarui</option><option value="name"' + (F.sort === 'name' ? ' selected' : '') + '>Nama A–Z</option><option value="id"' + (F.sort === 'id' ? ' selected' : '') + '>Barcode</option><option value="created"' + (F.sort === 'created' ? ' selected' : '') + '>Terbaru didaftarkan</option></select>' +
       '<label class="as-check"><input type="checkbox" data-f="archive"' + (F.archive ? ' checked' : '') + '>Sertakan arsip (disposed)</label>' +
@@ -242,11 +265,11 @@
     var q = F.q.toLowerCase();
     var list = AS.devices({ includeDisposed: F.archive || F.status === 'disposed' }).filter(function (d) {
       if (F.cat && d.category !== F.cat) return false;
-      if (F.dept && d.location.dept !== F.dept) return false;
+      if (F.dept && deptOf(d) !== F.dept) return false;
       if (F.building && d.location.building !== F.building) return false;
       if (F.status && d.status !== F.status) return false;
       if (F.recent && !within(d.createdAt, 30)) return false;
-      if (q && [d.id, d.name, d.serial, d.ip, d.mac, d.brand, d.model, d.pic, d.location.room, d.location.dept].join(' ').toLowerCase().indexOf(q) === -1) return false;
+      if (q && [d.id, d.name, d.serial, d.ip, d.mac, d.brand, d.model, d.pic, d.location.room, deptOf(d)].join(' ').toLowerCase().indexOf(q) === -1) return false;
       return true;
     });
     var cmp = {
@@ -266,13 +289,13 @@
     if (!box) return; // a history-only recap page has no device list
     app.querySelector('[data-count]').textContent = list.length + ' perangkat' + (F.archive ? ' (termasuk arsip)' : '');
     box.innerHTML = rows.length ? '<div class="rs-table-wrap"><table class="rs-table as-table"><thead><tr>' +
-      '<th scope="col">Barcode / ID</th><th scope="col">Nama Perangkat</th><th scope="col">Kategori</th><th scope="col">Lokasi Saat Ini</th><th scope="col">Status</th><th scope="col">Diperbarui</th><th scope="col" class="as-td-tight"><span class="as-sr">Aksi</span></th></tr></thead><tbody>' +
+      '<th scope="col">Barcode / ID</th><th scope="col">Nama Perangkat</th><th scope="col">Kategori</th><th scope="col">Departemen</th><th scope="col">Status</th><th scope="col">Diperbarui</th><th scope="col" class="as-td-tight"><span class="as-sr">Aksi</span></th></tr></thead><tbody>' +
       rows.map(function (d) {
         return '<tr data-href="' + AU.trackUrl(d.id) + '" tabindex="0">' +
           '<td>' + AU.code(d.id) + '</td>' +
-          '<td><span class="as-name"><b>' + esc(d.name) + '</b><small>' + esc([d.department, [d.brand, d.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')) + (d.ip ? ' · ' + esc(d.ip) : '') + '</small></span></td>' +
+          '<td><span class="as-name"><b>' + esc(d.name) + '</b><small>' + esc([[d.brand, d.model].filter(Boolean).join(' '), d.ip].filter(Boolean).join(' · ')) + '</small></span></td>' +
           '<td>' + AU.catChip(d) + '</td>' +
-          '<td>' + AU.locHtml(d.location) + '</td>' +
+          '<td><span class="as-name"><b style="font-weight:500">' + esc(deptOf(d)) + '</b>' + (d.pic ? '<small>' + esc(d.pic) + '</small>' : '') + '</span></td>' +
           '<td>' + AU.statusPill(d.status) + '</td>' +
           '<td class="rs-nowrap"><span class="as-name" style="min-width:0"><span>' + esc(AU.fmtDate(d.updatedAt)) + '</span><small>' + esc((d.updatedBy || '').split(' (')[0]) + '</small></span></td>' +
           '<td class="as-td-tight"><a class="as-iconbtn" href="' + AU.trackUrl(d.id) + '" aria-label="Lacak ' + esc(d.name) + '" title="Lihat detail & lokasi">' + ic('chevron-right') + '</a></td></tr>';
@@ -284,7 +307,7 @@
 
   function drawChips() {
     var chips = [];
-    var lab = { cat: function (v) { return 'Kategori: ' + AS.CAT[v].label; }, dept: function (v) { return 'Unit: ' + v; }, building: function (v) { return v; }, status: function (v) { return 'Status: ' + AS.STATUS[v].label; } };
+    var lab = { cat: function (v) { return 'Kategori: ' + AS.CAT[v].label; }, dept: function (v) { return 'Departemen: ' + v; }, building: function (v) { return v; }, status: function (v) { return 'Status: ' + AS.STATUS[v].label; } };
     ['cat', 'dept', 'building', 'status'].forEach(function (k) { if (F[k]) chips.push({ k: k, t: lab[k](F[k]) }); });
     if (F.recent) chips.push({ k: 'recent', t: 'Didaftarkan 30 hari terakhir' });
     if (F.q) chips.push({ k: 'q', t: 'Kata kunci: "' + F.q + '"' });
@@ -299,12 +322,12 @@
     app.querySelectorAll('[data-f]').forEach(function (el) { var k = el.getAttribute('data-f'); if (el.type === 'checkbox') el.checked = !!F[k]; else el.value = F[k]; });
     app.querySelectorAll('[data-kpi]').forEach(function (b) {
       var k = b.getAttribute('data-kpi');
-      b.setAttribute('aria-pressed', String((k === 'servis' && F.status === 'servis') || (k === 'disposal' && F.status === 'disposal') || (k === 'recent' && F.recent)));
+      b.setAttribute('aria-pressed', String(kpiOn(k)));
     });
   }
   function apply(scroll) {
     F.page = 1; syncControls(); drawTable();
-    if (scroll) document.getElementById('as-devices').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scroll) { showTab('perangkat'); app.querySelector('.as-tabs').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
   function clearAll() { F.q = ''; F.cat = ''; F.dept = ''; F.building = ''; F.status = ''; F.recent = false; apply(); }
 
@@ -333,6 +356,7 @@
     });
     app.addEventListener('click', function (e) {
       var b;
+      if ((b = e.target.closest('[data-tab]'))) return showTab(b.getAttribute('data-tab'));
       if ((b = e.target.closest('[data-kpi]'))) {
         var k = b.getAttribute('data-kpi');
         if (k === 'all') { clearAll(); return apply(true); }
@@ -345,14 +369,10 @@
         if (v) { F[b.hasAttribute('data-fdept') ? 'dept' : 'building'] = v; return apply(true); }
         showAllLoc = true; var lb0 = app.querySelector('[data-locbars]'); lb0.innerHTML = locBars(AS.devices()); AU.render(lb0); return;
       }
-      if ((b = e.target.closest('[data-loc]'))) {
-        locMode = b.getAttribute('data-loc');
-        app.querySelectorAll('[data-loc]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
-        var lb = app.querySelector('[data-locbars]'); lb.innerHTML = locBars(AS.devices()); AU.render(lb); return;
-      }
       if ((b = e.target.closest('[data-unset]'))) { var u = b.getAttribute('data-unset'); F[u] = u === 'recent' ? false : ''; return apply(); }
       if (e.target.closest('[data-clear]')) return clearAll();
       if ((b = e.target.closest('[data-pg]'))) { F.page = +b.getAttribute('data-pg'); drawTable(); document.getElementById('as-devices').scrollIntoView({ block: 'start' }); return; }
+      if (e.target.closest('[data-scancheck]')) return scanCheck();
       if (e.target.closest('[data-export]')) return exportCsv();
       if ((b = e.target.closest('[data-ops]'))) { OPS = b.getAttribute('data-ops'); history.replaceState(null, '', '#' + OPS); return drawOps(); }
       if ((b = e.target.closest('[data-opspg]'))) { O.page = +b.getAttribute('data-opspg'); drawOpsTable(); document.getElementById('as-ops').scrollIntoView({ block: 'start' }); return; }
@@ -370,6 +390,30 @@
       var tr = e.target.closest && e.target.closest('tr[data-href]');
       if (tr && e.target === tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); location.href = tr.getAttribute('data-href'); }
     });
+  }
+
+  /* Scan Barcode: checks one device by its label and shows the answer, ready for the next scan. */
+  function scanCheck() {
+    AU.scan({ title: 'Cek Perangkat dari Barcode', camera: true, onResult: function (code) {
+      setTimeout(function () { showScanned(code); }, 0); // after the scanner window has closed
+      return true;
+    } });
+  }
+  function showScanned(code) {
+    var d = AS.get(code), again = '<button type="button" class="rs-btn rs-btn--ghost" data-again>' + ic('scan-line') + 'Scan Lagi</button>';
+    var wire = function (api) { api.$('[data-again]').addEventListener('click', function () { api.close(); scanCheck(); }); };
+    if (!d) {
+      AU.modal({ title: 'Barcode belum terdaftar', size: 'sm', onMount: wire,
+        body: '<div class="as-notice as-notice--warn">' + ic('circle-alert') + '<div>Barcode <code class="as-code">' + esc(code) + '</code> belum terdaftar di Aset IT.</div></div>',
+        foot: again + '<a class="rs-btn rs-btn--primary" href="registrasi?code=' + encodeURIComponent(code) + '">' + ic('circle-plus') + 'Daftarkan Perangkat</a>' });
+      return;
+    }
+    var svc = AS.openService(d.id);
+    AU.modal({ title: 'Perangkat ditemukan', size: 'sm', onMount: wire,
+      body: '<div class="as-devcard"><span class="as-tile">' + ic(AU.catOf(d).icon) + '</span><div class="as-devcard__text"><b>' + esc(d.name) + '</b><small>' + AU.code(d.id) + ' · ' + esc(AU.catName(d)) + '</small></div>' + AU.statusPill(d.status) + '</div>' +
+        GF.kv([['Departemen', deptOf(d)], ['Penanggung Jawab', d.pic || '—'], ['Merek / Model', [d.brand, d.model].filter(Boolean).join(' ')], ['Serial Number', d.serial], ['IP Address', d.ip], ['MAC Address', d.mac],
+          ['Servis Berjalan', svc ? svc.id + ' · ' + AS.SVC_STATUS[svc.status].label : ''], ['Diperbarui', AU.fmtDate(d.updatedAt)]]),
+      foot: again + '<a class="rs-btn rs-btn--primary" href="' + AU.trackUrl(d.id) + '">' + ic('search') + 'Lihat Detail</a>' });
   }
 
   function exportCsv() {

@@ -56,8 +56,10 @@ final class AssetLedgerTest extends TestCase
     {
         $ledger = $this->registered();
         $this->expectRule('sudah terdaftar', fn () => $ledger->register($this->pc()));
-        $this->expectRule('Format IP', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000001', 'ip' => '10.20.1.300', 'mac' => '', 'serial' => ''])));
-        $this->expectRule('MAC harus', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000002', 'ip' => '', 'mac' => '12:34', 'serial' => ''])));
+        // IP and MAC are free text: no format rule, only "already used".
+        $free = $ledger->register($this->pc(['id' => 'ITEM-00000001', 'ip' => '123456789', 'mac' => '123456789', 'serial' => '']));
+        self::assertSame(['123456789', '123456789'], [$free['ip'], $free['mac']]);
+        $this->expectRule('MAC sudah dipakai', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000002', 'ip' => '', 'mac' => '123456789', 'serial' => ''])));
         $this->expectRule('IP sudah dipakai oleh PC Admisi 1', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000003', 'mac' => '', 'serial' => ''])));
         $this->expectRule('Serial number sudah dipakai', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000004', 'ip' => '', 'mac' => ''])));
         $this->expectRule('Pilih kategori', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000005', 'category' => 'toaster'])));
@@ -121,7 +123,7 @@ final class AssetLedgerTest extends TestCase
         self::assertSame('servis', $ledger->state()['devices']['AB-BTN-PC-0001']['status']);
         $this->expectRule('masih memiliki laporan servis', fn () => $ledger->addService(['deviceId' => 'AB-BTN-PC-0001', 'type' => 'Perbaikan', 'problem' => 'Lagi']));
         $this->expectRule('dikunci', fn () => $ledger->update('AB-BTN-PC-0001', ['status' => 'aktif']));
-        $this->expectRule('Selesaikan dulu laporan servis SRV-2026-0001', fn () => $ledger->requestDisposal(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Rusak']));
+        $this->expectRule('Selesaikan dulu laporan servis SRV-2026-0001', fn () => $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Rusak', 'method' => 'Lelang']));
         // Selesai with the device found broken needs its berita acara; with it attached the service closes as Rusak.
         $this->expectRule('berita acara kerusakan', fn () => $ledger->updateService('SRV-2026-0001', ['status' => 'done', 'afterStatus' => 'rusak']));
         $done = $ledger->updateService('SRV-2026-0001', ['status' => 'done', 'afterStatus' => 'rusak', 'docs' => [['id' => 5]]]);
@@ -135,28 +137,75 @@ final class AssetLedgerTest extends TestCase
         self::assertSame('aktif', $ledger->updateService($again['id'], ['status' => 'done', 'afterStatus' => 'aktif'])['afterStatus']);
     }
 
-    public function testRejectedDisposalRestoresTheStatusAndCompletedOneArchives(): void
+    public function testDisposeArchivesTheDeviceInOneStep(): void
     {
         $ledger = $this->registered();
-        $ledger->update('AB-BTN-PC-0001', ['status' => 'cadangan']);
-        $first = $ledger->requestDisposal(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Berfungsi']);
-        self::assertSame('disposal', $ledger->state()['devices']['AB-BTN-PC-0001']['status']);
-        $this->expectRule('sudah memiliki pengajuan disposal', fn () => $ledger->requestDisposal(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Berfungsi']));
-        $this->expectRule('setelah disetujui', fn () => $ledger->completeDisposal($first['id'], ['method' => 'Lelang']));
-        $ledger->rejectDisposal($first['id'], ['approvedBy' => 'Manajer IT']);
-        self::assertSame('cadangan', $ledger->state()['devices']['AB-BTN-PC-0001']['status']);
-
-        $second = $ledger->requestDisposal(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Rusak berat', 'condition' => 'Rusak total']);
-        self::assertSame('DSP-2026-0002', $second['id']);
-        $ledger->approveDisposal($second['id'], ['approvedBy' => 'Manajer IT', 'role' => 'Manajer IT']);
-        $ledger->completeDisposal($second['id'], ['method' => 'Lelang', 'reference' => 'BA-1', 'date' => '2026-11-04']);
+        $this->expectRule('metode', fn () => $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Rusak']));
+        $this->expectRule('alasan', fn () => $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'method' => 'Lelang']));
+        $done = $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Rusak berat', 'condition' => 'Rusak total', 'method' => 'Lelang', 'reference' => 'BA-1', 'date' => '2026-11-04']);
+        self::assertSame(['DSP-2026-0001', 'disposed', '2026-11-04'], [$done['id'], $done['status'], $done['disposedAt']]);
         $device = $ledger->state()['devices']['AB-BTN-PC-0001'];
-        self::assertSame('disposed', $device['status']);
-        self::assertSame($second['id'], $device['disposalId']);
+        self::assertSame(['disposed', $done['id']], [$device['status'], $device['disposalId']]);
         $this->expectRule('sudah dihapuskan', fn () => $ledger->update('AB-BTN-PC-0001', ['name' => 'Baru']));
+        $this->expectRule('sudah dihapuskan', fn () => $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Usang', 'condition' => 'Rusak', 'method' => 'Lelang']));
         // A disposed device frees its IP, MAC and serial for a new one.
         $ledger->register($this->pc(['id' => 'AB-BTN-PC-0002']));
-        self::assertCount(2, $ledger->changes()['disposals']);
+        self::assertCount(1, $ledger->changes()['disposals']);
+    }
+
+    /** A ledger whose device has a request left open by the former request / approval flow. */
+    private function withOldRequest(string $status): AssetLedger
+    {
+        $state = $this->registered()->state();
+        $state['devices']['AB-BTN-PC-0001']['status'] = 'disposal';
+        $state['seq']['dsp'] = 1;
+        $state['disposals'][] = ['id' => 'DSP-2026-0001', 'deviceId' => 'AB-BTN-PC-0001', 'deviceName' => 'PC Admisi 1', 'category' => 'pc', 'lastLocation' => [], 'reason' => 'Usang', 'reasonDetail' => '', 'condition' => 'Rusak',
+            'disposalDate' => '', 'docs' => [], 'status' => $status, 'requestedBy' => 'Lama', 'requestedAt' => '2026-11-01T00:00:00.000Z', 'prevStatus' => 'cadangan',
+            'approvedBy' => '', 'approverRole' => '', 'approvedAt' => '', 'decisionNote' => '', 'method' => '', 'reference' => '', 'disposedAt' => ''];
+        return new AssetLedger($state, 'Admin IT', '2026-11-04T03:00:00.000Z');
+    }
+
+    public function testHandoverRecordsTheDocumentAndAssignsTheDevices(): void
+    {
+        $ledger = new AssetLedger($this->registered()->state(), 'Admin IT', '2026-11-04T03:00:00.000Z', [7 => ['name' => 'ttd.png', 'type' => 'image', 'size' => 10], 8 => ['name' => 'ttd2.png', 'type' => 'image', 'size' => 10]]);
+        $in = ['deviceIds' => ['AB-BTN-PC-0001'], 'fromName' => 'Admin', 'toName' => 'Bayu', 'toDept' => 'Farmasi', 'condition' => 'Baik', 'date' => '2026-11-04', 'signFrom' => [['id' => 7]]];
+        $this->expectRule('minimal satu', fn () => $ledger->handover(['deviceIds' => []] + $in));
+        $this->expectRule('Isi nama', fn () => $ledger->handover(['toName' => ''] + $in));
+        $r = $ledger->handover($in);
+        self::assertSame('BAST-2026-0001', $r['id']);
+        self::assertSame(7, $r['signFrom']['id']);
+        self::assertNull($r['signTo']);
+        $device = $ledger->state()['devices']['AB-BTN-PC-0001'];
+        self::assertSame(['Bayu', 'Farmasi', 'Farmasi'], [$device['pic'], $device['department'], $device['location']['dept']]);
+        self::assertSame('Serah terima', $ledger->state()['moves'][0]['reason']);
+
+        $this->expectRule('sudah ada', fn () => $ledger->signHandover($r['id'], ['role' => 'from', 'file' => [['id' => 8]]]));
+        $this->expectRule('belum diunggah', fn () => $ledger->signHandover($r['id'], ['role' => 'to', 'file' => [['id' => 99]]]));
+        self::assertSame(8, $ledger->signHandover($r['id'], ['role' => 'to', 'file' => [['id' => 8]]])['signTo']['id']);
+        self::assertCount(1, $ledger->changes()['handovers']);
+    }
+
+    public function testHandoverRefusesADeviceInService(): void
+    {
+        $ledger = $this->registered();
+        $ledger->addService(['deviceId' => 'AB-BTN-PC-0001', 'type' => 'Perbaikan', 'problem' => 'Mati', 'technician' => 'Tim IT']);
+        $this->expectRule('tidak dapat diserahterimakan', fn () => $ledger->handover(['deviceIds' => ['AB-BTN-PC-0001'], 'fromName' => 'A', 'toName' => 'B', 'toDept' => 'C', 'condition' => 'Baik']));
+    }
+
+    public function testAnOldOpenRequestIsFinishedByDisposeOrCancelled(): void
+    {
+        foreach (['pending', 'approved'] as $status) {
+            $ledger = $this->withOldRequest($status);
+            $done = $ledger->dispose(['deviceId' => 'AB-BTN-PC-0001', 'reason' => 'Rusak berat', 'condition' => 'Rusak total', 'method' => 'Lelang']);
+            self::assertSame(['DSP-2026-0001', 'disposed', 'Lama'], [$done['id'], $done['status'], $done['requestedBy']]);
+            self::assertCount(1, $ledger->state()['disposals']);
+            self::assertSame('disposed', $ledger->state()['devices']['AB-BTN-PC-0001']['status']);
+
+            $ledger = $this->withOldRequest($status);
+            $ledger->rejectDisposal('DSP-2026-0001', ['approvedBy' => 'Admin IT', 'note' => 'Batal']);
+            self::assertSame('cadangan', $ledger->state()['devices']['AB-BTN-PC-0001']['status']);
+            $this->expectRule('sudah selesai', fn () => $ledger->rejectDisposal('DSP-2026-0001', ['approvedBy' => 'Admin IT']));
+        }
     }
 
     public function testMoveAndPlaceRecordTheHistory(): void
@@ -191,6 +240,9 @@ final class AssetLedgerTest extends TestCase
         $ledger = $this->registered();
         $this->expectRule('sama dengan lokasi saat ini', fn () => $ledger->move('AB-BTN-PC-0001',
             ['to' => ['building' => '', 'floor' => '', 'dept' => 'Admisi & Pendaftaran', 'room' => 'Loket 1'], 'reason' => 'Relokasi unit kerja']));
+        // Ruangan is no longer asked: the same department is the same location, whatever room an older record has.
+        self::assertTrue(AssetLedger::sameLoc(['dept' => 'IGD', 'room' => 'Triase'], ['dept' => 'IGD', 'room' => '']));
+        self::assertFalse(AssetLedger::sameLoc(['dept' => 'IGD', 'room' => ''], ['dept' => 'ICU', 'room' => '']));
         self::assertSame('Admisi & Pendaftaran · Loket 1', AssetLedger::locText(['building' => '', 'floor' => '', 'dept' => 'Admisi & Pendaftaran', 'room' => 'Loket 1']));
         self::assertSame('ICU · Bed 2 (Gedung Utama, Lantai 3)', AssetLedger::locText(['building' => 'Gedung Utama', 'floor' => 'Lantai 3', 'dept' => 'ICU', 'room' => 'Bed 2']));
     }

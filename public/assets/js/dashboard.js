@@ -42,7 +42,7 @@
       + `<button type="button" class="card-menu-btn" data-card-menu aria-haspopup="menu" aria-expanded="false" aria-label="${esc(`Menu ${card.title}`)}">${icon('ellipsis', 'size-4')}</button>`
       + `<span class="card-icon tone-${esc(card.color)}">${card.image ? `<img class="card-icon-img" src="${esc(card.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : icon(card.icon)}</span>`
       + `<h3 class="portal-card-title">${title}</h3>`
-      + `<p class="portal-card-description">${esc(card.description)}${isLink && !href ? '<span class="card-note">Alamat belum diatur</span>' : ''}</p>`
+      + `<p class="portal-card-description${/^(https?:\/\/|www\.)\S+$/i.test(String(card.description ?? '').trim()) ? ' is-url' : ''}">${esc(card.description)}${isLink && !href ? '<span class="card-note">Alamat belum diatur</span>' : ''}</p>`
       + `${foot}</article>`;
   };
   // "Jadwal Hari Ini" (default) or "Semua Form": a per-browser preference, not dashboard data.

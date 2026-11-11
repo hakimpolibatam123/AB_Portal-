@@ -31,7 +31,7 @@
   function attrs(name, o) {
     return ' id="g-' + esc(name) + '" name="' + esc(name) + '" aria-labelledby="qt-' + esc(name) + '"' + (o.ph ? ' placeholder="' + esc(o.ph) + '"' : '') +
       (o.list ? ' list="' + o.list + '"' : '') + (o.inputmode ? ' inputmode="' + o.inputmode + '"' : '') + (o.max ? ' max="' + o.max + '"' : '') + (o.min ? ' min="' + o.min + '"' : '') +
-      (o.readonly ? ' readonly' : '') + ' autocomplete="off"';
+      (o.maxlength ? ' maxlength="' + o.maxlength + '"' : '') + (o.readonly ? ' readonly' : '') + ' autocomplete="off"';
   }
   function text(name, o) {
     o = o || {};
@@ -153,20 +153,15 @@
     return '<dl class="as-dl as-dl--gf">' + rows.filter(function (r) { return r && r[1]; }).map(function (r) { return '<dt>' + esc(r[0]) + '</dt><dd>' + (r[2] ? r[1] : esc(r[1])) + '</dd>'; }).join('') + '</dl>';
   }
   function datalist(id, items) { return '<datalist id="' + id + '">' + items.map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist>'; }
-  /* location questions (Departemen / Ruangan). Gedung and Lantai are no longer asked; a new location has them empty. */
-  function rooms() {
-    var set = {}; window.AS.devices({ includeDisposed: true }).forEach(function (d) { if (d.location && d.location.room) set[d.location.room] = 1; });
-    return Object.keys(set).sort();
-  }
-  function locQs(prefix, loc, opt) {
-    loc = loc || {}; opt = opt || {};
+  /* The location question: a location is its department / unit only. Ruangan, Gedung and Lantai are no longer asked;
+     a new location has them empty, older records keep theirs. */
+  function locQs(prefix, loc) {
+    loc = loc || {};
     // Free text with suggestions: a unit that is not in the list is simply typed (and suggested next time).
     return q({ name: prefix + 'dept', title: 'Departemen / Unit Kerja', req: true, help: 'Pilih dari daftar atau ketik nama unit / tempat baru.',
-        body: text(prefix + 'dept', { value: loc.dept, list: 'dl-depts-' + prefix, ph: 'Ketik atau pilih unit kerja' }) + datalist('dl-depts-' + prefix, window.AS.deptNames()) }) +
-      q({ name: prefix + 'room', title: 'Ruangan', req: true,
-        body: text(prefix + 'room', { value: loc.room, list: 'dl-rooms-' + prefix }) + datalist('dl-rooms-' + prefix, rooms()) });
+      body: text(prefix + 'dept', { value: loc.dept, list: 'dl-depts-' + prefix, ph: 'Ketik atau pilih unit kerja' }) + datalist('dl-depts-' + prefix, window.AS.deptNames()) });
   }
-  function readLoc(root, prefix) { return { building: '', floor: '', dept: val(root, prefix + 'dept'), room: val(root, prefix + 'room') }; }
+  function readLoc(root, prefix) { return { building: '', floor: '', dept: val(root, prefix + 'dept'), room: '' }; }
 
   window.GF = { head: head, section: section, q: q, text: text, area: area, select: select, radio: radio, ro: ro, actions: actions,
     val: val, err: err, clear: clear, need: need, firstErr: firstErr, show: show, wire: wire, done: done, kv: kv, datalist: datalist,

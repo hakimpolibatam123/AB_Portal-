@@ -7,17 +7,20 @@ use App\Core\Audit;
 use App\Core\Auth;
 use App\Core\Database;
 use App\Core\SecurityHeaders;
+use App\Core\View;
 use App\Models\AssetRepository;
 use App\Models\Attachment;
+use App\Services\AssetImport;
 use App\Services\AssetLedger;
 use App\Services\FileUpload;
+use App\Services\HandoverPdf;
 use PDOException;
 use RuntimeException;
 use Throwable;
 
 /**
  * Aset IT (IT Asset Management, design docs Portal_Web_RS_Awal_Bros_Botania/ASET-IT-README.md).
- * GET /aset: the module's menu. GET /aset/{registrasi|penempatan|lacak|servis|disposal|rekap}: the forms and the
+ * GET /aset: the module's menu. GET /aset/{registrasi|lacak|servis|disposal|serah-terima|rekap}: the forms and the
  * recap, drawn by the design's scripts in public/assets/aset. GET /aset/data: every asset record as JSON.
  * POST /aset/perintah {commands: [{op, args}]}: the operations of one form submit, replayed on the server
  * (App\Services\AssetLedger) in one transaction; answers the new state, or 422 with the broken rule.
@@ -27,24 +30,25 @@ final class AssetController extends Controller
     /** page => [title, page script] */
     public const PAGES = [
         'registrasi' => ['Registrasi Perangkat', 'aset/aset-register.js'],
-        'penempatan' => ['Penempatan Perangkat', 'aset/aset-place.js'],
-        'lacak' => ['Lacak Perangkat', 'aset/aset-track.js'],
+        'lacak' => ['Penempatan & Lacak Perangkat', 'aset/aset-track.js'],
         'servis' => ['Servis & Pemeliharaan', 'aset/aset-service.js'],
         'disposal' => ['Disposal Perangkat', 'aset/aset-disposal.js'],
-        'rekap' => ['Rekap Aset IT', 'aset/aset-rekap.js'],
+        'serah-terima' => ['Serah Terima Perangkat', 'aset/aset-handover.js'],
+        'rekap' => ['Rekap & Daftar Perangkat', 'aset/aset-rekap.js'],
     ];
     /** Recap of one part (GET /aset/rekap-<view>), linked from each card of the Aset IT menu: view => [title, lead]. */
     public const RECAP_VIEWS = [
-        'perangkat' => ['Rekap Daftar Perangkat', 'Semua perangkat terdaftar per kategori dan lokasi, dengan filter dan ekspor CSV.'],
         'perpindahan' => ['Rekap Penempatan & Perpindahan', 'Riwayat perpindahan lokasi perangkat, terbaru dulu.'],
         'servis' => ['Rekap Riwayat Servis', 'Semua laporan servis dan pemeliharaan dari formulir Servis.'],
-        'disposal' => ['Rekap Disposal', 'Semua pengajuan, persetujuan, dan pelaksanaan disposal perangkat.'],
+        'disposal' => ['Rekap Disposal', 'Semua perangkat yang sudah dihapuskan, beserta alasan dan metodenya.'],
+        'serah-terima' => ['Rekap Serah Terima', 'Semua berita acara serah terima perangkat, dengan tanda tangan dan PDF-nya.'],
     ];
     private const MAX_COMMANDS = 20;
     /** Documents of the module (POST /aset/berkas): attachments of owner "asset", field = kind. */
     private const FILE_OWNER = 'asset';
-    private const FILE_KINDS = ['berita_acara', 'invoice', 'disposal'];
+    private const FILE_KINDS = ['berita_acara', 'invoice', 'disposal', 'ttd'];
     private const FILE_BYTES = 10 * 1024 * 1024;
+    private const IMPORT_BYTES = 5 * 1024 * 1024;
 
     public function index(): void
     {
@@ -52,16 +56,128 @@ final class AssetController extends Controller
     }
 
     public function registrasi(): void { $this->page('registrasi'); }
-    public function penempatan(): void { $this->page('penempatan'); }
+
+    /** GET /aset/registrasi/template: the Excel template of Import Perangkat. */
+    public function importTemplate(): void
+    {
+        if (!class_exists(\ZipArchive::class)) {
+            json_response(['message' => 'Template Excel memerlukan ekstensi PHP zip. Aktifkan extension=zip di php.ini lalu jalankan ulang server.'], 503);
+            return;
+        }
+        $dir = BASE_PATH . '/storage/app/tmp';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0770, true);
+        }
+        $path = $dir . '/' . bin2hex(random_bytes(8)) . '.xlsx';
+        AssetImport::template($path);
+        $body = (string) file_get_contents($path);
+        @unlink($path);
+        header_remove('Content-Security-Policy');
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Length: ' . strlen($body));
+        header('Content-Disposition: attachment; filename="template-import-perangkat.xlsx"');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        echo $body;
+    }
+
+    /**
+     * POST /aset/registrasi/impor (multipart: file, simpan): checks a filled template row by row through the ledger.
+     * Without simpan=1 nothing is stored (the preview); with it, the valid rows are stored in one transaction.
+     */
+    public function import(): void
+    {
+        $file = is_array($_FILES['file'] ?? null) && !is_array($_FILES['file']['name'] ?? null) ? $_FILES['file'] : [];
+        $check = FileUpload::check($file, ['xlsx'], self::IMPORT_BYTES);
+        if (isset($check['empty']) || isset($check['error'])) {
+            json_response(['message' => $check['error'] ?? 'Pilih file Excel .xlsx.'], 422);
+            return;
+        }
+        $save = ($_POST['simpan'] ?? '') === '1';
+        @set_time_limit(120);
+        $user = Auth::user();
+        $by = mb_substr(trim((string) ($user['name'] ?? '')) ?: (string) ($user['username'] ?? 'Admin'), 0, 150);
+        $pdo = Database::connection();
+        try {
+            $rows = AssetImport::read((string) $file['tmp_name']);
+            if ($save) {
+                $pdo->beginTransaction();
+            }
+            $repository = new AssetRepository($pdo);
+            $ledger = new AssetLedger($repository->load($save), $by, gmdate('Y-m-d\TH:i:s.000\Z'));
+            $result = AssetImport::apply($ledger, $rows);
+            $valid = count(array_filter($result, static fn (array $r): bool => $r['error'] === ''));
+            if ($save) {
+                $repository->save($ledger->changes());
+                if ($valid > 0) {
+                    Audit::log('create', 'asset', null, ['action' => 'import', 'text' => 'Import Excel: ' . $valid . ' perangkat didaftarkan, ' . (count($result) - $valid) . ' baris dilewati'], null, null, $pdo);
+                }
+                $pdo->commit();
+            }
+        } catch (RuntimeException $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            json_response(['message' => $exception->getMessage()], 422);
+            return;
+        } catch (Throwable $exception) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Import perangkat: ' . $exception->getMessage());
+            json_response(['message' => 'File tidak dapat diproses. Pastikan memakai template yang disediakan, lalu coba lagi.'], 500);
+            return;
+        }
+        json_response(['rows' => $result, 'valid' => $valid, 'failed' => count($result) - $valid, 'saved' => $save]);
+    }
+    /** The former Penempatan form is part of Lacak now; old links (?barcode=) open the same device there. */
+    public function penempatan(): void
+    {
+        $id = is_string($_GET['barcode'] ?? null) ? trim($_GET['barcode']) : '';
+        redirect('/aset/lacak' . ($id !== '' ? '?id=' . rawurlencode($id) . '#pindah' : ''), 301);
+    }
     public function lacak(): void { $this->page('lacak'); }
     public function servis(): void { $this->page('servis'); }
     public function disposal(): void { $this->page('disposal'); }
+    public function serahTerima(): void { $this->page('serah-terima'); }
+    public function rekapSerahTerima(): void { $this->page('rekap', 'serah-terima'); }
+
+    /** GET /aset/serah-terima/pdf?id=BAST-…: the berita acara of one serah terima as a PDF download. */
+    public function serahTerimaPdf(): void
+    {
+        $id = is_string($_GET['id'] ?? null) ? $_GET['id'] : '';
+        $pdo = Database::connection();
+        $handover = null;
+        foreach ((new AssetRepository($pdo))->load()['handovers'] as $record) {
+            if ($record['id'] === $id) {
+                $handover = $record;
+            }
+        }
+        if ($handover === null) {
+            http_response_code(404);
+            View::render('errors/design-404', ['pageTitle' => 'Serah terima tidak ditemukan'], 'design');
+            return;
+        }
+        $files = new Attachment($pdo);
+        $pdf = HandoverPdf::render($handover, static function (?array $file) use ($files): ?string {
+            $found = $file !== null ? $files->find((int) ($file['id'] ?? 0)) : null;
+            return $found !== null && $found['owner_type'] === self::FILE_OWNER ? Attachment::path($found) : null;
+        });
+        Audit::tryLog('export', 'asset', null, ['action' => 'serah_terima_pdf', 'text' => 'PDF serah terima ' . $id . ' diunduh']);
+        header_remove('Content-Security-Policy');
+        header('Content-Type: application/pdf');
+        header('Content-Length: ' . strlen($pdf));
+        header('Content-Disposition: attachment; filename="' . preg_replace('/[^A-Za-z0-9-]/', '', $id) . '.pdf"');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, no-store');
+        echo $pdf;
+    }
     public function rekap(): void { $this->page('rekap'); }
-    public function rekapPerangkat(): void { $this->page('rekap', 'perangkat'); }
+    /** The former Daftar Perangkat page is a tab of the recap now; old links open that tab. */
+    public function rekapPerangkat(): void { redirect('/aset/rekap#perangkat', 301); }
     public function rekapPerpindahan(): void { $this->page('rekap', 'perpindahan'); }
     public function rekapServis(): void { $this->page('rekap', 'servis'); }
     public function rekapDisposal(): void { $this->page('rekap', 'disposal'); }
-
     public function data(): void
     {
         try {
@@ -229,7 +345,7 @@ final class AssetController extends Controller
     private function page(string $key, string $view = ''): void
     {
         [$title, $script] = self::PAGES[$key];
-        $lead = 'Ringkasan inventaris perangkat keras, servis, perpindahan, dan disposal.';
+        $lead = 'Ringkasan aset, daftar semua perangkat, dan riwayat servis, disposal, serta perpindahan.';
         if ($view !== '') {
             [$title, $lead] = self::RECAP_VIEWS[$view];
         }

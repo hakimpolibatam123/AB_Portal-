@@ -41,10 +41,10 @@
   function catName(d) { var k = AS.kindOf(d); return k ? 'Lainnya: ' + k : catOf(d).label; }
   function catChip(d) { var c = catOf(d), k = AS.kindOf(d); return '<span class="as-cat">' + ic(c.icon) + esc(k || c.short) + '</span>'; }
   function code(id) { return '<code class="as-code">' + esc(id) + '</code>'; }
-  function locHtml(l, compact) {
+  /* A location is shown as its department; Ruangan, Gedung and Lantai of older records stay in the data and the CSV. */
+  function locHtml(l) {
     if (!l || !(l.dept || l.room)) return '<span class="rs-muted">Belum ditempatkan</span>';
-    return '<span class="as-loc-cell"><b>' + esc(l.dept) + (l.room ? ' · ' + esc(l.room) : '') + '</b>' +
-      (compact || !(l.building || l.floor) ? '' : '<small>' + esc([l.building, l.floor].filter(Boolean).join(', ')) + '</small>') + '</span>';
+    return '<span class="as-loc-cell"><b>' + esc(AS.deptText(l)) + '</b></span>';
   }
   function toast(t, d, v) { if (window.siteToast) window.siteToast(t, d, v); }
   function render(root) { if (window.rsRenderIcons && root) window.rsRenderIcons(root); }
@@ -544,7 +544,7 @@
       reg.hidden = !regCode;
       if (regCode) {
         var page = location.pathname.split('/').filter(Boolean).pop() || '';
-        reg.querySelector('[data-register]').href = 'registrasi?code=' + encodeURIComponent(regCode) + (/^(penempatan|lacak|servis|disposal)$/.test(page) ? '&dari=' + page : '');
+        reg.querySelector('[data-register]').href = 'registrasi?code=' + encodeURIComponent(regCode) + (/^(servis|disposal)$/.test(page) ? '&dari=' + page : '');
       }
     }
     function pick(d) {
@@ -563,7 +563,7 @@
       if (!q) { close(); return; }
       list.innerHTML = items.length ? items.map(function (d, i) {
         return '<button type="button" role="option" id="' + lid + '-' + i + '" aria-selected="' + (i === act) + '" data-idx="' + i + '" class="as-suggest__item"><span class="as-tile as-tile--sm">' + ic(catOf(d).icon) + '</span>' +
-          '<span class="as-suggest__text"><b>' + esc(d.name) + '</b><small>' + esc(d.id) + ' · ' + esc(d.location ? d.location.dept + ' · ' + d.location.room : '') + '</small></span>' + statusPill(d.status) + '</button>';
+          '<span class="as-suggest__text"><b>' + esc(d.name) + '</b><small>' + esc(d.id) + ' · ' + esc((d.location && d.location.dept) || d.department || '—') + '</small></span>' + statusPill(d.status) + '</button>';
       }).join('') : '<div class="as-suggest__none">Tidak ada perangkat yang cocok. Tekan Enter untuk mencari barcode persis.</div>';
       render(list);
       list.hidden = false; input.setAttribute('aria-expanded', 'true');
@@ -614,7 +614,7 @@
   function deviceCard(d) {
     return '<div class="as-devcard"><span class="as-tile">' + ic(catOf(d).icon) + '</span><div class="as-devcard__text"><b>' + esc(d.name) + '</b>' +
       '<small>' + code(d.id) + ' · ' + esc(catName(d)) + (d.brand ? ' · ' + esc(d.brand + ' ' + d.model) : '') + '</small>' +
-      '<small>' + ic('map-pin') + ' ' + esc(AS.locText(d.location)) + '</small></div>' + statusPill(d.status) + '</div>';
+      '<small>' + ic('map-pin') + ' ' + esc(AS.deptText(AS.whereIs(d))) + '</small></div>' + statusPill(d.status) + '</div>';
   }
 
   /* ---------------- files (disposal documents/photos) ---------------- */

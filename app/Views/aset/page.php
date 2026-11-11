@@ -15,7 +15,7 @@
             <p><?= e($recapLead) ?></p>
         </div>
         <div class="as-head__actions">
-            <?php if ($recapView !== ''): ?><a class="rs-btn rs-btn--onhead" href="<?= e(url('/aset/rekap')) ?>"><span data-i="chart-column"></span>Rekap Global</a><?php endif; ?>
+            <?php if ($recapView !== ''): ?><a class="rs-btn rs-btn--onhead" href="<?= e(url('/aset/rekap')) ?>"><span data-i="chart-column"></span>Rekap & Daftar Perangkat</a><?php endif; ?>
             <a class="rs-btn rs-btn--onhead" href="<?= e(url('/aset')) ?>"><span data-i="layout-grid"></span>Menu Aset IT</a>
         </div>
     </section>

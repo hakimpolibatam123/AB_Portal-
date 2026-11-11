@@ -333,6 +333,8 @@ main .rsab-action .rs-ic { font-size: 16px !important; }
 .rs-btn--sm { min-height: 32px; padding: 0 10px; font-size: 13px; gap: 6px; }
 .rs-btn--danger { background: #fff; color: var(--rs-err); border-color: #F2C4BF; }
 .rs-btn--danger:hover, .rs-btn.is-armed { background: var(--rs-err); color: #fff; border-color: var(--rs-err); }
+.rs-btn--danger-fill { background: var(--rs-err); color: #fff; border-color: var(--rs-err); }
+.rs-btn--danger-fill:hover { background: #912018; border-color: #912018; }
 .rs-btn:disabled { opacity: .6; cursor: default; }
 .rs-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .ta-r { text-align: right !important; }

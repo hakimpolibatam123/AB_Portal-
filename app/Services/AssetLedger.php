@@ -13,10 +13,9 @@ use RuntimeException;
  * devices keyed by barcode, moves, services, disposals and activity as lists.
  *
  * Rules (ASET-IT-README): an open service sets the device to "servis" and its end status is chosen when done; a
- * disposal request sets "disposal", a rejection restores the previous status, a completed disposal sets
- * "disposed" for good (nothing is hard-deleted). One open service and one open disposal per device; no disposal
- * while a service is open. Barcodes are unique; IP and MAC must be well formed and, like the serial, not used by
- * another active device.
+ * disposal is done in one step and sets "disposed" for good (nothing is hard-deleted); cancelling an older open
+ * request restores the previous status. One open service per device; no disposal while a service is open.
+ * Barcodes are unique; IP, MAC and serial are not used by another active device.
  */
 final class AssetLedger
 {
@@ -30,7 +29,7 @@ final class AssetLedger
     /** Accepted asset codes (same list as CODE_FORMATS in aset-store.js). */
     private const CODE_FORMAT = '/^(ITEM-\d{8}|AB-BTN-(PC|MPC|LTP|MON|PRN|SCN|CCTV|NET|SRV|UPS|OTH)-\d{4})$/';
     /** Operations the browser may send, with how many arguments each takes. */
-    public const OPERATIONS = ['register' => 1, 'update' => 2, 'place' => 2, 'move' => 2, 'addService' => 1, 'updateService' => 2, 'requestDisposal' => 1, 'approveDisposal' => 2, 'rejectDisposal' => 2, 'completeDisposal' => 2];
+    public const OPERATIONS = ['register' => 1, 'update' => 2, 'place' => 2, 'move' => 2, 'addService' => 1, 'updateService' => 2, 'dispose' => 1, 'rejectDisposal' => 2, 'handover' => 1, 'signHandover' => 2];
 
     /** @var array<string, true> */
     private array $touchedDevices = [];
@@ -38,6 +37,7 @@ final class AssetLedger
     private array $touchedServices = [];
     /** @var array<string, true> */
     private array $touchedDisposals = [];
+    private array $touchedHandovers = [];
     private int $movesBefore;
     private int $activityBefore;
 
@@ -47,8 +47,8 @@ final class AssetLedger
      */
     public function __construct(private array $state, private readonly string $by, private readonly string $now, private readonly array $files = [])
     {
-        $this->state += ['devices' => [], 'moves' => [], 'services' => [], 'disposals' => [], 'activity' => [], 'seq' => []];
-        $this->state['seq'] += ['srv' => 0, 'dsp' => 0, 'mv' => 0, 'act' => 0];
+        $this->state += ['devices' => [], 'moves' => [], 'services' => [], 'disposals' => [], 'handovers' => [], 'activity' => [], 'seq' => []];
+        $this->state['seq'] += ['srv' => 0, 'dsp' => 0, 'mv' => 0, 'act' => 0, 'bast' => 0];
         $this->movesBefore = count($this->state['moves']);
         $this->activityBefore = count($this->state['activity']);
     }
@@ -66,6 +66,7 @@ final class AssetLedger
             'moves' => array_slice($this->state['moves'], $this->movesBefore),
             'services' => array_values(array_filter($this->state['services'], fn (array $s): bool => isset($this->touchedServices[$s['id']]))),
             'disposals' => array_values(array_filter($this->state['disposals'], fn (array $r): bool => isset($this->touchedDisposals[$r['id']]))),
+            'handovers' => array_values(array_filter($this->state['handovers'], fn (array $r): bool => isset($this->touchedHandovers[$r['id']]))),
             'activity' => array_slice($this->state['activity'], $this->activityBefore),
         ];
     }
@@ -87,10 +88,10 @@ final class AssetLedger
             'move' => $this->move($id(0), $a(1)),
             'addService' => $this->addService($a(0)),
             'updateService' => $this->updateService($id(0), $a(1)),
-            'requestDisposal' => $this->requestDisposal($a(0)),
-            'approveDisposal' => $this->approveDisposal($id(0), $a(1)),
+            'dispose' => $this->dispose($a(0)),
             'rejectDisposal' => $this->rejectDisposal($id(0), $a(1)),
-            'completeDisposal' => $this->completeDisposal($id(0), $a(1)),
+            'handover' => $this->handover($a(0)),
+            'signHandover' => $this->signHandover(is_string($args[0] ?? null) ? $args[0] : '', $a(1)),
         };
     }
 
@@ -430,74 +431,43 @@ final class AssetLedger
 
     /* ---------------- disposals ---------------- */
 
-    public function requestDisposal(array $in): array
+    /**
+     * Disposal in one step (no request / approval): the device is archived at once. An older request still open
+     * is finished by this same record.
+     */
+    public function dispose(array $in): array
     {
         $d = $this->device((string) ($in['deviceId'] ?? ''));
         if ($d['status'] === 'disposed') {
             throw new RuntimeException('Perangkat sudah dihapuskan.');
         }
-        if ($this->openDisposal($d['id']) !== null) {
-            throw new RuntimeException('Perangkat ini sudah memiliki pengajuan disposal yang aktif.');
-        }
         $open = $this->openService($d['id']);
         if ($open !== null) {
-            throw new RuntimeException('Selesaikan dulu laporan servis ' . $open['id'] . ' sebelum mengajukan disposal.');
+            throw new RuntimeException('Selesaikan dulu laporan servis ' . $open['id'] . ' sebelum disposal.');
         }
         $reason = self::text($in['reason'] ?? '', 150);
         $condition = self::text($in['condition'] ?? '', 150);
         if ($reason === '' || $condition === '') {
             throw new RuntimeException('Isi alasan dan kondisi perangkat.');
         }
-        $this->state['seq']['dsp']++;
-        $r = [
-            'id' => 'DSP-' . substr($this->now, 0, 4) . '-' . str_pad((string) $this->state['seq']['dsp'], 4, '0', STR_PAD_LEFT),
-            'deviceId' => $d['id'], 'deviceName' => $d['name'], 'category' => $d['category'], 'lastLocation' => $d['location'],
-            'reason' => $reason, 'reasonDetail' => self::text($in['reasonDetail'] ?? '', 2000, true), 'condition' => $condition,
-            'disposalDate' => self::date($in['disposalDate'] ?? ''), 'docs' => $this->attach($in['docs'] ?? null, [], 10), 'status' => 'pending',
-            'requestedBy' => $this->by, 'requestedAt' => $this->now, 'prevStatus' => $d['status'],
-            'approvedBy' => '', 'approverRole' => '', 'approvedAt' => '', 'decisionNote' => '', 'method' => '', 'reference' => '', 'disposedAt' => '',
-        ];
-        $this->state['disposals'][] = $r;
-        $this->touchedDisposals[$r['id']] = true;
-        $this->setStatus($d['id'], 'disposal');
-        $this->log($d['id'], 'disposal', 'Pengajuan disposal ' . $r['id'] . ' dibuat — ' . $reason);
-        return $r;
-    }
-
-    public function approveDisposal(string $id, array $in): array
-    {
-        $r = $this->pendingDisposal($id);
-        $r = $this->decide($r, $in, 'approved');
-        if (self::date($in['disposalDate'] ?? '') !== '') {
-            $r['disposalDate'] = self::date($in['disposalDate']);
-        }
-        $this->putDisposal($r);
-        $this->log($r['deviceId'], 'disposal', 'Disposal ' . $r['id'] . ' disetujui oleh ' . $r['approvedBy'] . ($r['approverRole'] !== '' ? ' (' . $r['approverRole'] . ')' : ''));
-        return $r;
-    }
-
-    public function rejectDisposal(string $id, array $in): array
-    {
-        $r = $this->decide($this->pendingDisposal($id), $in, 'rejected');
-        $this->putDisposal($r);
-        $d = $this->state['devices'][$r['deviceId']] ?? null;
-        if ($d !== null && $d['status'] === 'disposal') {
-            $this->setStatus($d['id'], ($r['prevStatus'] ?? '') !== '' && $r['prevStatus'] !== 'disposal' ? $r['prevStatus'] : 'aktif');
-        }
-        $this->log($r['deviceId'], 'disposal', 'Disposal ' . $r['id'] . ' ditolak oleh ' . $r['approvedBy'] . ($r['decisionNote'] !== '' ? ' — ' . $r['decisionNote'] : ''));
-        return $r;
-    }
-
-    public function completeDisposal(string $id, array $in): array
-    {
-        $r = $this->disposal($id);
-        if ($r['status'] !== 'approved') {
-            throw new RuntimeException('Disposal hanya dapat dilaksanakan setelah disetujui.');
-        }
         $method = self::text($in['method'] ?? '', 150);
         if ($method === '') {
             throw new RuntimeException('Pilih metode penghapusan.');
         }
+        $r = $this->openDisposal($d['id']);
+        if ($r === null) {
+            $this->state['seq']['dsp']++;
+            $r = [
+                'id' => 'DSP-' . substr($this->now, 0, 4) . '-' . str_pad((string) $this->state['seq']['dsp'], 4, '0', STR_PAD_LEFT),
+                'deviceId' => $d['id'], 'deviceName' => $d['name'], 'category' => $d['category'], 'lastLocation' => $d['location'],
+                'disposalDate' => '', 'docs' => [], 'requestedBy' => $this->by, 'requestedAt' => $this->now, 'prevStatus' => $d['status'],
+                'approvedBy' => '', 'approverRole' => '', 'approvedAt' => '', 'decisionNote' => '',
+            ];
+            $this->state['disposals'][] = $r;
+        }
+        $r['reason'] = $reason;
+        $r['reasonDetail'] = self::text($in['reasonDetail'] ?? '', 2000, true);
+        $r['condition'] = $condition;
         $r['status'] = 'disposed';
         $r['disposedAt'] = self::date($in['date'] ?? '') ?: substr($this->now, 0, 10);
         $r['method'] = $method;
@@ -507,41 +477,133 @@ final class AssetLedger
             $r['docs'] = array_slice([...($r['docs'] ?? []), ...$docs], 0, 20);
         }
         $this->putDisposal($r);
-        if (isset($this->state['devices'][$r['deviceId']])) {
-            $d = $this->state['devices'][$r['deviceId']];
-            $d['status'] = 'disposed';
-            $d['disposedAt'] = $r['disposedAt'];
-            $d['disposalId'] = $r['id'];
-            $d['updatedAt'] = $this->now;
-            $d['updatedBy'] = $this->by;
-            $this->state['devices'][$d['id']] = $d;
-            $this->touchedDevices[$d['id']] = true;
-        }
-        $this->log($r['deviceId'], 'disposal', 'Perangkat dihapuskan (' . $method . ')' . ($r['reference'] !== '' ? ' — BA ' . $r['reference'] : '') . '. Riwayat diarsipkan.');
+        $d['status'] = 'disposed';
+        $d['disposedAt'] = $r['disposedAt'];
+        $d['disposalId'] = $r['id'];
+        $d['updatedAt'] = $this->now;
+        $d['updatedBy'] = $this->by;
+        $this->state['devices'][$d['id']] = $d;
+        $this->touchedDevices[$d['id']] = true;
+        $this->log($d['id'], 'disposal', 'Perangkat dihapuskan (' . $method . ') — ' . $reason . ($r['reference'] !== '' ? ' — BA ' . $r['reference'] : '') . '. Riwayat diarsipkan.');
         return $r;
     }
 
-    private function decide(array $r, array $in, string $status): array
+    /** Cancels an older request still open (the only kind left: new disposals are done in one step). */
+    public function rejectDisposal(string $id, array $in): array
     {
+        $r = $this->disposal($id);
+        if (!in_array($r['status'], ['pending', 'approved'], true)) {
+            throw new RuntimeException('Pengajuan ini sudah selesai.');
+        }
         $who = self::text($in['approvedBy'] ?? '', 150);
         if ($who === '') {
-            throw new RuntimeException('Isi nama pejabat yang memutuskan.');
+            throw new RuntimeException('Isi nama yang membatalkan.');
         }
-        $r['status'] = $status;
+        $r['status'] = 'rejected';
         $r['approvedBy'] = $who;
         $r['approverRole'] = self::text($in['role'] ?? '', 150);
         $r['approvedAt'] = $this->now;
         $r['decisionNote'] = self::text($in['note'] ?? '', 1000, true);
+        $this->putDisposal($r);
+        $d = $this->state['devices'][$r['deviceId']] ?? null;
+        if ($d !== null && $d['status'] === 'disposal') {
+            $this->setStatus($d['id'], ($r['prevStatus'] ?? '') !== '' && $r['prevStatus'] !== 'disposal' ? $r['prevStatus'] : 'aktif');
+        }
+        $this->log($r['deviceId'], 'disposal', 'Pengajuan disposal ' . $r['id'] . ' dibatalkan oleh ' . $r['approvedBy'] . ($r['decisionNote'] !== '' ? ' — ' . $r['decisionNote'] : ''));
         return $r;
     }
 
-    private function pendingDisposal(string $id): array
+    /* ---------------- serah terima ---------------- */
+
+    /**
+     * Serah Terima Perangkat: one berita acara for one or more devices. The receiver becomes each device's person
+     * in charge and its department the device's department. Signatures may come now or later (signHandover).
+     */
+    public function handover(array $in): array
     {
-        $r = $this->disposal($id);
-        if ($r['status'] !== 'pending') {
-            throw new RuntimeException('Pengajuan ini tidak menunggu persetujuan.');
+        $ids = [];
+        foreach (is_array($in['deviceIds'] ?? null) ? $in['deviceIds'] : [] as $value) {
+            $id = self::normId($value);
+            if ($id !== '') {
+                $ids[$id] = true;
+            }
+        }
+        if ($ids === []) {
+            throw new RuntimeException('Pilih minimal satu perangkat.');
+        }
+        if (count($ids) > 30) {
+            throw new RuntimeException('Maksimal 30 perangkat per serah terima.');
+        }
+        $fromName = self::text($in['fromName'] ?? '', 150);
+        $toName = self::text($in['toName'] ?? '', 150);
+        $toDept = self::text($in['toDept'] ?? '', 100);
+        $condition = self::text($in['condition'] ?? '', 150);
+        if ($fromName === '' || $toName === '' || $toDept === '' || $condition === '') {
+            throw new RuntimeException('Isi nama yang menyerahkan, nama dan departemen yang menerima, serta kondisi perangkat.');
+        }
+        $devices = [];
+        foreach (array_keys($ids) as $id) {
+            $d = $this->device((string) $id);
+            if (in_array($d['status'], ['servis', 'disposal', 'disposed'], true)) {
+                throw new RuntimeException($d['name'] . ' berstatus ' . self::STATUS[$d['status']] . ', tidak dapat diserahterimakan.');
+            }
+            $devices[] = $d;
+        }
+        $this->state['seq']['bast']++;
+        $r = [
+            'id' => 'BAST-' . substr($this->now, 0, 4) . '-' . str_pad((string) $this->state['seq']['bast'], 4, '0', STR_PAD_LEFT),
+            'date' => self::date($in['date'] ?? '') ?: substr($this->now, 0, 10),
+            'fromName' => $fromName, 'fromRole' => self::text($in['fromRole'] ?? '', 150), 'toName' => $toName, 'toRole' => self::text($in['toRole'] ?? '', 150), 'toDept' => $toDept,
+            'condition' => $condition, 'note' => self::text($in['note'] ?? '', 2000, true),
+            'devices' => array_map(static fn (array $d): array => ['id' => $d['id'], 'name' => $d['name'], 'brand' => $d['brand'] ?? '', 'model' => $d['model'] ?? '', 'serial' => $d['serial'] ?? ''], $devices),
+            'signFrom' => $this->attach($in['signFrom'] ?? null, [], 1)[0] ?? null, 'signTo' => $this->attach($in['signTo'] ?? null, [], 1)[0] ?? null,
+            'createdAt' => $this->now, 'createdBy' => $this->by,
+        ];
+        $this->state['handovers'][] = $r;
+        $this->touchedHandovers[$r['id']] = true;
+        foreach ($devices as $d) {
+            $location = ['building' => '', 'floor' => '', 'dept' => $toDept, 'room' => ''];
+            if (self::placed($d) && !self::sameLoc($d['location'], $location)) {
+                $this->move($d['id'], ['to' => $location, 'reason' => 'Serah terima', 'pic' => $toName]);
+            } else {
+                $this->place($d['id'], ['location' => self::placed($d) ? $d['location'] : $location, 'pic' => $toName]);
+            }
+            $this->state['devices'][$d['id']]['department'] = $toDept;
+            $this->state['devices'][$d['id']]['updatedAt'] = $this->now;
+            $this->state['devices'][$d['id']]['updatedBy'] = $this->by;
+            $this->touchedDevices[$d['id']] = true;
+            $this->log($d['id'], 'handover', 'Serah terima ' . $r['id'] . ': ' . $fromName . ' → ' . $toName . ' (' . $toDept . ')');
         }
         return $r;
+    }
+
+    /** Adds a signature not given yet ($in: role "from" or "to", file). A signature already given stays as it is. */
+    public function signHandover(string $id, array $in): array
+    {
+        foreach ($this->state['handovers'] as $i => $r) {
+            if ($r['id'] !== $id) {
+                continue;
+            }
+            $field = ['from' => 'signFrom', 'to' => 'signTo'][$in['role'] ?? ''] ?? null;
+            if ($field === null) {
+                throw new RuntimeException('Pihak yang menandatangani tidak dikenal.');
+            }
+            if (!empty($r[$field])) {
+                throw new RuntimeException('Tanda tangan pihak ini sudah ada.');
+            }
+            $file = $this->attach($in['file'] ?? null, [], 1)[0] ?? null;
+            if ($file === null) {
+                throw new RuntimeException('Tanda tangan belum diunggah.');
+            }
+            $r[$field] = $file;
+            $this->state['handovers'][$i] = $r;
+            $this->touchedHandovers[$id] = true;
+            foreach ($r['devices'] as $d) {
+                $this->log($d['id'], 'handover', 'Tanda tangan ' . ($in['role'] === 'from' ? 'yang menyerahkan' : 'yang menerima') . ' ditambahkan pada ' . $id);
+            }
+            return $r;
+        }
+        throw new RuntimeException('Serah terima tidak ditemukan.');
     }
 
     /* ---------------- state helpers ---------------- */
@@ -630,15 +692,9 @@ final class AssetLedger
             'text' => mb_substr($text, 0, 500), 'at' => $this->now, 'by' => $this->by];
     }
 
-    /** IP and MAC format, and IP, MAC and serial not used by another active device. */
+    /** IP, MAC and serial not used by another active device. IP and MAC are free text (no format check). */
     private function checkNetwork(array $d, ?string $exceptId): void
     {
-        if ($d['ip'] !== '' && !self::validIp($d['ip'])) {
-            throw new RuntimeException('Format IP tidak valid (contoh: 10.20.1.21).');
-        }
-        if ($d['mac'] !== '' && !self::validMac($d['mac'])) {
-            throw new RuntimeException('MAC harus 12 digit heksadesimal (contoh: 3C:D9:2B:1A:2F:4E).');
-        }
         $labels = ['ip' => 'IP', 'mac' => 'MAC', 'serial' => 'Serial number'];
         foreach ($labels as $field => $label) {
             $value = strtoupper(trim((string) $d[$field]));
@@ -690,27 +746,10 @@ final class AssetLedger
 
     public static function normMac(mixed $s): string
     {
-        $raw = is_string($s) ? $s : '';
+        // Free text (up to the 17 characters of asset_devices.mac); only a plain 12-hex-digit MAC is formatted.
+        $raw = trim(str_replace(["\r", "\n", "\t"], ' ', is_string($s) ? $s : ''));
         $hex = strtoupper((string) preg_replace('/[^0-9a-f]/i', '', $raw));
-        return strlen($hex) === 12 ? implode(':', str_split($hex, 2)) : strtoupper(mb_substr(trim($raw), 0, 17));
-    }
-
-    public static function validIp(string $s): bool
-    {
-        if (preg_match('/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/', trim($s), $m) !== 1) {
-            return false;
-        }
-        foreach (array_slice($m, 1) as $part) {
-            if ((int) $part > 255 || (string) (int) $part !== $part) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public static function validMac(string $s): bool
-    {
-        return preg_match('/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/', self::normMac($s)) === 1;
+        return strlen($hex) === 12 && preg_match('/^[0-9a-f:.\-\s]+$/i', $raw) === 1 ? implode(':', str_split($hex, 2)) : mb_strtoupper(mb_substr($raw, 0, 17));
     }
 
     public static function placed(array $d): bool
@@ -718,15 +757,10 @@ final class AssetLedger
         return ($d['location']['dept'] ?? '') !== '' || ($d['location']['room'] ?? '') !== '';
     }
 
-    /** A location is its unit and room; Gedung / Lantai are no longer asked (older records may still have them). */
+    /** A location is its department / unit; Ruangan, Gedung and Lantai are no longer asked (older records may still have them). */
     public static function sameLoc(array $a, array $b): bool
     {
-        foreach (['dept', 'room'] as $k) {
-            if (($a[$k] ?? '') !== ($b[$k] ?? '')) {
-                return false;
-            }
-        }
-        return true;
+        return ($a['dept'] ?? '') === ($b['dept'] ?? '');
     }
 
     public static function locText(array $l): string

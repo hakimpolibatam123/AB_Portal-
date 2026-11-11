@@ -34,7 +34,9 @@
     row-gap: 0;
   }
   .portal-card-title { @apply w-full self-start text-[11.7px] font-bold leading-snug text-slate-800 uppercase; }
-  .portal-card-description { @apply mt-0.5 w-full text-[10.8px] font-medium leading-normal text-slate-500; }
+  /* Stays inside the card: long text stops at two lines, a bare address (no spaces) at one line with "…". */
+  .portal-card-description { @apply mt-0.5 w-full min-w-0 text-[10.8px] font-medium leading-normal text-slate-500 line-clamp-2; overflow-wrap: anywhere; }
+  .portal-card-description.is-url { @apply block truncate; }
   .card-icon { @apply mb-3 mt-1 flex size-12 shrink-0 self-center items-center justify-center rounded-xl leading-none; }
   .card-badge { @apply rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide; }
   .hero-pattern { background-image: radial-gradient(circle at 100% 100%, rgba(20, 184, 166, 0.15) 0%, transparent 60%), radial-gradient(circle at 0% 0%, rgba(45, 212, 191, 0.08) 0%, transparent 50%); }

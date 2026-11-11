@@ -5,6 +5,43 @@
   var app = document.getElementById('as-app');
   var EDIT = null, keep = {}, invoices = null;
 
+  app.addEventListener('click', function (e) { if (e.target.closest('[data-import]')) openImport(); });
+
+  /* Import Excel: template, upload, a row-by-row check, then the valid rows are stored. */
+  function openImport() {
+    var file = null, valid = 0;
+    var m = AU.modal({ title: 'Import Perangkat dari Excel', size: 'lg',
+      body: '<ol class="as-import-steps"><li><b>Unduh template</b><p>Isi satu baris untuk satu perangkat. Petunjuknya ada di sheet "Petunjuk".</p><a class="rs-btn rs-btn--ghost" href="registrasi/template">' + ic('download') + 'Unduh Template Excel</a></li>' +
+        '<li><b>Unggah file yang sudah diisi</b><p>Belum tersimpan sampai Anda menekan tombol Import.</p><label class="gf-drop as-sig-drop"><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-xlsx hidden>' + ic('upload') + '<span class="gf-drop__title" data-fname>Pilih file Excel (.xlsx)</span><span class="gf-drop__formats">Maks. 5 MB · maks. 1000 perangkat</span></label></li></ol>' +
+        '<p class="pm-err" data-ierr hidden>' + ic('circle-alert') + '<span class="as-errt"></span></p><div data-iresult></div>',
+      foot: '<button type="button" class="rs-btn rs-btn--ghost" data-x>Batal</button><button type="submit" class="rs-btn rs-btn--primary" data-igo hidden>' + ic('upload') + '<span data-igo-t></span></button>',
+      onSubmit: function () {
+        if (!file || !valid) return;
+        go.disabled = true; fail('');
+        AS.importFile(file, true).then(function (r) {
+          AU.flash('Import berhasil', r.valid + ' perangkat didaftarkan' + (r.failed ? ', ' + r.failed + ' baris dilewati.' : '.'));
+          location.href = 'rekap#perangkat';
+        }, function (err) { go.disabled = false; fail(err.message); });
+      } });
+    var err = m.$('[data-ierr]'), result = m.$('[data-iresult]'), go = m.$('[data-igo]');
+    function fail(t) { err.hidden = !t; err.querySelector('.as-errt').textContent = t || ''; }
+    function show(r) {
+      valid = r.valid;
+      result.innerHTML = '<div class="as-import-sum">' + AU.pill({ tone: 'ok', label: r.valid + ' siap diimport' }) + (r.failed ? AU.pill({ tone: 'err', label: r.failed + ' bermasalah (dilewati)' }) : '') + '</div>' +
+        '<div class="rs-table-wrap as-import-table"><table class="rs-table as-table"><thead><tr><th scope="col">Baris</th><th scope="col">ID Aset</th><th scope="col">Nama</th><th scope="col">Kategori</th><th scope="col">Departemen</th><th scope="col">Hasil</th></tr></thead><tbody>' +
+        r.rows.map(function (x) { return '<tr' + (x.error ? ' class="as-import-bad"' : '') + '><td>' + x.row + '</td><td>' + esc(x.id || '—') + '</td><td>' + esc(x.name || '—') + '</td><td>' + esc(x.category || '—') + '</td><td>' + esc(x.department || '—') + '</td><td>' + (x.error ? esc(x.error) : 'Siap') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      go.hidden = !valid; m.$('[data-igo-t]').textContent = 'Import ' + valid + ' Perangkat';
+    }
+    m.$('[data-xlsx]').addEventListener('change', function (e) {
+      var f = e.target.files && e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      file = null; valid = 0; go.hidden = true; result.innerHTML = ''; fail('');
+      m.$('[data-fname]').textContent = 'Memeriksa ' + f.name + '…';
+      AS.importFile(f, false).then(function (r) { file = f; m.$('[data-fname]').textContent = f.name; show(r); },
+        function (x) { m.$('[data-fname]').textContent = 'Pilih file Excel (.xlsx)'; fail(x.message); });
+    });
+  }
+
   AS.ready().then(function () {
     AU.consumeFlash();
     var e = AU.qs('edit');
@@ -23,7 +60,8 @@
     var locked = EDIT && ['servis', 'disposal'].indexOf(EDIT.status) !== -1;
     app.innerHTML = '<form class="gf" id="gf-form" novalidate>' +
       GF.head({ title: EDIT ? 'Edit Data Perangkat' : 'Registrasi Perangkat',
-        meta: [['Petugas', AS.me()], ['Tanggal', AU.fmtDate(AU.today())], EDIT ? ['ID Aset', EDIT.id] : null], rekap: 'rekap-perangkat' }) +
+        meta: [['Petugas', AS.me()], ['Tanggal', AU.fmtDate(AU.today())], EDIT ? ['ID Aset', EDIT.id] : null], rekap: 'rekap#perangkat' }) +
+      (EDIT || fixed ? '' : '<section class="gf-card as-import-card"><div><b>Banyak perangkat sekaligus?</b><p>Isi template Excel, lalu import semuanya dalam satu kali unggah.</p></div><button type="button" class="gf-btn gf-btn--outline" data-import>' + ic('upload') + 'Import Excel</button></section>') +
 
       GF.section(1, 'Identitas Perangkat', '', null, ' data-sec="id"') +
       // Some devices (a laser pointer, a small accessory) carry no barcode label: the portal then makes the ID.
@@ -46,6 +84,8 @@
       GF.q({ name: 'name', title: 'Nama Perangkat', req: true, body: GF.text('name', { value: d.name }) }) +
       GF.q({ name: 'department', title: 'Departemen', req: true, help: 'Departemen pemilik / pengguna perangkat. Pilih dari daftar atau ketik nama departemen.',
         body: GF.text('department', { value: d.department, list: 'dl-depts' }) + GF.datalist('dl-depts', departments()) }) +
+      GF.q({ name: 'pic', title: 'Penanggung Jawab / Pengguna', badge: 'Opsional', help: 'Nama orang yang memakai atau bertanggung jawab atas perangkat ini.',
+        body: GF.text('pic', { value: d.pic }) }) +
       GF.q({ name: 'brandmodel', title: 'Merek dan Model', req: true,
         body: '<div class="gf-inline"><label class="gf-sub" style="flex:1 1 200px"><span>Merek</span>' + GF.text('brand', { value: d.brand, list: 'dl-brands' }) + '</label>' +
           '<label class="gf-sub" style="flex:1 1 200px"><span>Model</span>' + GF.text('model', { value: d.model }) + '</label></div>' + GF.datalist('dl-brands', brands()) }) +
@@ -165,8 +205,8 @@
       netBox.innerHTML = GF.section(0, 'Jaringan', '', null, ' data-sec="net"') +
         (c.net === 'optional' && c.key !== 'printer' ? GF.q({ name: 'net_on', title: 'Apakah perangkat terhubung ke jaringan?', req: true, body: GF.radio('net_on', [{ value: 'ya', label: 'Ya, memiliki IP Address' }, { value: 'tidak', label: 'Tidak' }], kv('net_on', EDIT ? (EDIT.ip || EDIT.mac ? 'ya' : 'tidak') : '')) }) : '') +
         (c.key === 'printer' && !on ? '' : '') +
-        (on ? GF.q({ name: 'ip', title: 'IP Address', req: c.net === true && !c.dhcp, body: GF.text('ip', { mono: true, inputmode: 'decimal', value: kv('ip', EDIT ? EDIT.ip : '') }) }) +
-          GF.q({ name: 'mac', title: 'MAC Address', body: GF.text('mac', { mono: true, value: kv('mac', EDIT ? EDIT.mac : '') }) }) : '');
+        (on ? GF.q({ name: 'ip', title: 'IP Address', req: c.net === true && !c.dhcp, body: GF.text('ip', { mono: true, maxlength: 45, value: kv('ip', EDIT ? EDIT.ip : '') }) }) +
+          GF.q({ name: 'mac', title: 'MAC Address', body: GF.text('mac', { mono: true, maxlength: 17, value: kv('mac', EDIT ? EDIT.mac : '') }) }) : '');
     }
     if (!c || !c.spec.length) specBox.innerHTML = '';
     else {
@@ -174,8 +214,9 @@
         c.spec.map(function (s) {
           var n = 'spec_' + s.key, v = kv(n, spec[s.key] || '');
           var body = s.type === 'select' ? (s.netSwitch || s.options.length <= 5 ? GF.radio(n, s.options, v) : GF.select(n, s.options, v))
-            : GF.text(n, { value: v, mono: s.mono, inputmode: s.inputmode, type: s.type === 'date' ? 'date' : 'text' });
-          return GF.q({ name: n, title: s.label, body: body });
+            : GF.text(n, { value: v, mono: s.mono, inputmode: s.inputmode, ph: s.ph, list: s.options ? 'dl-' + n : '', type: s.type === 'date' ? 'date' : 'text' }) +
+              (s.options ? GF.datalist('dl-' + n, s.options) : '');
+          return GF.q({ name: n, title: s.label, help: s.help, body: body });
         }).join('');
     }
     AU.render(netBox); AU.render(specBox);
@@ -194,19 +235,22 @@
     var ip = GF.val(form, 'ip'), mac = GF.val(form, 'mac'), serial = GF.val(form, 'serial');
     if (c && netOn(c)) {
       if (form.querySelector('.gf-q[data-q="ip"] .gf-req') && !ip) { GF.err(form, 'ip', 'IP Address wajib untuk perangkat jaringan.'); ok = false; }
-      if (ip && !AS.validIp(ip)) { GF.err(form, 'ip', 'Format IP tidak valid (contoh: 10.20.1.21).'); ok = false; }
-      else if (ip) { var cf = AS.conflicts('ip', ip, EDIT && EDIT.id); if (cf) { GF.err(form, 'ip', 'IP sudah dipakai oleh ' + cf.name + ' (' + cf.id + ').'); ok = false; } }
-      if (mac && !AS.validMac(mac)) { GF.err(form, 'mac', 'MAC harus 12 digit heksadesimal (contoh: 3C:D9:2B:1A:2F:4E).'); ok = false; }
-      else if (mac) { var cm = AS.conflicts('mac', mac, EDIT && EDIT.id); if (cm) { GF.err(form, 'mac', 'MAC sudah tercatat pada ' + cm.name + ' (' + cm.id + ').'); ok = false; } }
+      // IP and MAC are free text (no format check); only a value already used by another device is refused.
+      if (ip) { var cf = AS.conflicts('ip', ip, EDIT && EDIT.id); if (cf) { GF.err(form, 'ip', 'IP sudah dipakai oleh ' + cf.name + ' (' + cf.id + ').'); ok = false; } }
+      if (mac) { var cm = AS.conflicts('mac', mac, EDIT && EDIT.id); if (cm) { GF.err(form, 'mac', 'MAC sudah tercatat pada ' + cm.name + ' (' + cm.id + ').'); ok = false; } }
     } else { ip = ''; mac = ''; }
     if (serial) { var cs = AS.conflicts('serial', serial, EDIT && EDIT.id); if (cs) { GF.err(form, 'serial', 'Serial number sudah tercatat pada ' + cs.name + ' (' + cs.id + ').'); ok = false; } }
     var pd = GF.val(form, 'purchaseDate');
     if (pd && pd > AU.today()) { GF.err(form, 'purchaseDate', 'Tanggal pembelian tidak boleh di masa depan.'); ok = false; }
     if (!ok) { GF.firstErr(form); return; }
 
-    var sp = {}; (c.spec || []).forEach(function (s) { var v = GF.val(form, 'spec_' + s.key); if (v) sp[s.key] = s.key === 'pairedWith' ? AS.normId(v) : v; });
+    var sp = {}; (c.spec || []).forEach(function (s) {
+      var v = GF.val(form, 'spec_' + s.key);
+      if (v && s.unit && /^\d+([.,]\d+)?$/.test(v)) v = v.replace(',', '.') + ' ' + s.unit; // "23.8" → "23.8 inch"
+      if (v) sp[s.key] = s.key === 'pairedWith' ? AS.normId(v) : v;
+    });
     if (kind) sp.kind = kind;
-    var data = { name: GF.val(form, 'name'), department: GF.val(form, 'department'), category: c.key, brand: GF.val(form, 'brand'), model: GF.val(form, 'model'), serial: serial, ip: ip, mac: mac,
+    var data = { name: GF.val(form, 'name'), department: GF.val(form, 'department'), pic: GF.val(form, 'pic'), category: c.key, brand: GF.val(form, 'brand'), model: GF.val(form, 'model'), serial: serial, ip: ip, mac: mac,
       purchaseDate: pd, notes: GF.val(form, 'notes'), spec: sp };
     var st = GF.val(form, 'status'), btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
@@ -238,20 +282,20 @@
   }
 
   // ?dari=<form>: the form whose scan found the code unregistered; the done screen leads back to it.
-  var FROM = { penempatan: 'Lanjutkan ke Penempatan Perangkat', lacak: 'Lanjutkan ke Lacak Perangkat', servis: 'Lanjutkan ke Servis Perangkat', disposal: 'Lanjutkan ke Disposal Perangkat' };
+  // Penempatan and Lacak are one page now (lacak), linked below for every new device.
+  var FROM = { servis: 'Lanjutkan ke Servis Perangkat', disposal: 'Lanjutkan ke Disposal Perangkat' };
   var from = FROM[AU.qs('dari')] ? AU.qs('dari') : '';
   function done(d) {
     history.replaceState(null, '', location.pathname);
-    var back = from ? [{ href: from + (from === 'lacak' ? '?id=' : '?barcode=') + encodeURIComponent(d.id), label: FROM[from], icon: 'chevron-right' }] : [];
+    var back = from ? [{ href: from + '?barcode=' + encodeURIComponent(d.id), label: FROM[from], icon: 'chevron-right' }] : [];
     GF.done(app, {
       title: 'Perangkat berhasil diregistrasi',
       text: d.name + ' tercatat dengan status ' + AS.STATUS[d.status].label + '.',
-      html: GF.kv([['ID Aset', AU.code(d.id), true], ['Departemen', d.department], ['Kategori', AU.catName(d)], ['Merek / Model', d.brand + ' ' + d.model], ['IP Address', d.ip], ['Didaftarkan', AU.fmtDateTime(d.createdAt) + ' · ' + d.createdBy],
+      html: GF.kv([['ID Aset', AU.code(d.id), true], ['Departemen', d.department], ['Penanggung Jawab', d.pic], ['Kategori', AU.catName(d)], ['Merek / Model', d.brand + ' ' + d.model], ['IP Address', d.ip], ['Didaftarkan', AU.fmtDateTime(d.createdAt) + ' · ' + d.createdBy],
         d.invoices && d.invoices.length ? ['Invoice Pembelian', AU.docsHtml(d.invoices), true] : null]),
-      links: back.concat([{ href: 'penempatan?barcode=' + encodeURIComponent(d.id), label: 'Tentukan lokasi penempatan', icon: 'map-pin' },
+      links: back.concat([{ href: AU.trackUrl(d.id), label: 'Lihat perangkat ini', icon: 'search' },
         { id: 'again', label: 'Registrasi perangkat lain', icon: 'rotate-ccw', fn: function () { render(); } },
-        { href: AU.trackUrl(d.id), label: 'Lacak perangkat ini', icon: 'search' },
-        { href: 'rekap-perangkat', label: 'Lihat rekap', icon: 'chart-column' }])
+        { href: 'rekap#perangkat', label: 'Lihat rekap', icon: 'chart-column' }])
     });
   }
 })();

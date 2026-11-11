@@ -53,7 +53,7 @@
             ],
             "env": {
                 "APP_ENV": "production",
-                "DB_DATABASE": "abportal_db"
+                "DB_DATABASE": "ab_portal"
             },
             "port": 8085
         }

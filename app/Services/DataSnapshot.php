@@ -27,6 +27,7 @@ final class DataSnapshot
         'asset_activity',
         'asset_devices',
         'asset_disposals',
+        'asset_handovers',
         'asset_moves',
         'asset_services',
         'attachments',
