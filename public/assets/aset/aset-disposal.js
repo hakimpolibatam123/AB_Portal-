@@ -5,7 +5,7 @@
   'use strict';
   var AS = window.AS, AU = window.AU, GF = window.GF, esc = AU.esc, ic = AU.ic;
   var app = document.getElementById('as-app');
-  var DEV = null, R = null, MODE = '', finder = null, form = null, picker = null;
+  var DEV = null, R = null, MODE = '', finder = null, form = null, picker = null, kept = null;
 
   AS.ready().then(function () {
     AU.consumeFlash();
@@ -37,6 +37,13 @@
     AU.render(app); GF.wire(form);
     form.addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) finder.set(AS.get(b.getAttribute('data-pick'))); });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+    // Unsent answers come back after leaving the page (asked first), with their device. A link that opens another
+    // device (?barcode=) is not interrupted.
+    kept = GF.draft(form, { key: 'disposal', title: 'Disposal Perangkat',
+      extra: function () { return DEV ? DEV.id : ''; },
+      allow: function (id) { var b = AU.qs('barcode'); return !!AS.get(id) && (!b || AS.normId(b) === id); },
+      label: function (dr) { var x = AS.get(dr.extra); return x ? 'Perangkat: ' + x.name + ' (' + x.id + ')' : ''; },
+      restore: function (id) { var x = AS.get(id); if (x && (!DEV || DEV.id !== id)) finder.set(x); } });
     setTimeout(function () { if (!DEV) finder.input.focus(); }, 60);
   }
 
@@ -66,7 +73,7 @@
         '<section class="gf-card">' + summary(R || {}) + '<div class="as-done__links" style="margin-top:14px"><a class="gf-link" href="' + AU.trackUrl(d.id) + '">' + ic('history') + 'Lihat riwayat lengkap perangkat</a></div></section>' + backBtn;
     } else if (MODE === 'blocked') {
       html += '<div class="gf-card as-notice as-notice--warn">' + ic('wrench') + '<div><b>Perangkat masih dalam servis</b> (' + esc(svc.id) + ' · ' + esc(AS.SVC_STATUS[svc.status].label) + '). Selesaikan laporan servis terlebih dahulu sebelum disposal. ' +
-        '<a class="gf-link" href="servis?barcode=' + encodeURIComponent(d.id) + '">Buka formulir servis</a></div></div>' + backBtn;
+        '<a class="gf-link" href="progres-servis?id=' + encodeURIComponent(svc.id) + '">Buka Progres Servis</a></div></div>' + backBtn;
     } else {
       var lastSvc = AS.servicesOf(d.id)[0], past = AS.disposalsOf(d.id).filter(function (r) { return r !== open; }), v = open || {};
       html += GF.section(2, 'Data Disposal') +
@@ -91,7 +98,7 @@
     var rs = box.querySelector('[data-reset]');
     if (rs) rs.addEventListener('click', function () {
       if (MODE !== 'form') { history.replaceState(null, '', 'disposal'); render(); return; }
-      AU.confirm({ title: 'Kosongkan formulir?', text: 'Jawaban yang sudah diisi akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { history.replaceState(null, '', 'disposal'); render(); } });
+      AU.confirm({ title: 'Kosongkan formulir?', text: 'Jawaban yang sudah diisi akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { kept.clear(); history.replaceState(null, '', 'disposal'); render(); } });
     });
     setTimeout(function () { form.querySelector('.gf-section').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
   }

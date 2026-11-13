@@ -56,7 +56,7 @@ final class ServiceDueAlert
         $rows = '';
         $text = "Servis Aset IT berikut mendekati atau melewati tenggat vendor:\n\n";
         foreach ($due as $t) {
-            $link = $portalUrl . '/aset/servis?barcode=' . rawurlencode((string) $t['deviceId']);
+            $link = $portalUrl . '/aset/progres-servis?id=' . rawurlencode((string) $t['id']);
             $when = self::when($t['dueDate'], $today);
             $late = $t['dueDate'] <= $today;
             $rows .= '<tr>'

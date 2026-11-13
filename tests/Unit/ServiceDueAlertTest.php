@@ -40,7 +40,7 @@ final class ServiceDueAlertTest extends TestCase
         self::assertSame('Pengingat tenggat vendor besok: PC <SRV-1> (SRV-1)', $mail['subject']);
         self::assertStringContainsString('PC &lt;SRV-1&gt;', $mail['html']);
         self::assertStringContainsString('6 Nov 2026', $mail['html']);
-        self::assertStringContainsString('http://localhost/AB-Portal/aset/servis?barcode=ITEM-00000001', $mail['text']);
+        self::assertStringContainsString('http://localhost/AB-Portal/aset/progres-servis?id=SRV-1', $mail['text']);
         self::assertSame('Pengingat: 2 servis mendekati tenggat vendor',
             ServiceDueAlert::email([self::svc('SRV-1', '2026-11-06'), self::svc('SRV-2', '2026-11-05')], '2026-11-05', '')['subject']);
     }

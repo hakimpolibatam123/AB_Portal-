@@ -3,7 +3,7 @@
   'use strict';
   var AS = window.AS, AU = window.AU, GF = window.GF, esc = AU.esc, ic = AU.ic;
   var app = document.getElementById('as-app');
-  var EDIT = null, keep = {}, invoices = null;
+  var EDIT = null, keep = {}, invoices = null, kept = null;
 
   app.addEventListener('click', function (e) { if (e.target.closest('[data-import]')) openImport(); });
 
@@ -107,6 +107,10 @@
     GF.wire(form);
     invoices = AU.filePicker(form, 'invoices', { max: 5, existing: EDIT ? EDIT.invoices || [] : [] });
     drawDynamic(); number(); idMode();
+    // Unsent answers come back after leaving the page (asked first). Not when a scanned code was handed over.
+    kept = GF.draft(form, { key: EDIT ? 'registrasi:' + EDIT.id : 'registrasi', title: EDIT ? 'Edit Data Perangkat' : 'Registrasi Perangkat',
+      allow: function () { return !fixed; },
+      label: function (dr) { return dr.values.name ? 'Nama perangkat: ' + dr.values.name : ''; } });
 
     form.addEventListener('change', function (e) {
       if (e.target.name === 'idmode') { idMode(); if (noCode()) { var c0 = form.querySelector('[name="category"]:checked') || form.querySelector('[name="category"]'); c0.focus(); } }
@@ -120,7 +124,7 @@
     });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(form); });
     form.querySelector('[data-reset]').addEventListener('click', function () {
-      AU.confirm({ title: 'Kosongkan formulir?', text: 'Semua jawaban di formulir ini akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { history.replaceState(null, '', location.pathname + (EDIT ? '?edit=' + encodeURIComponent(EDIT.id) : '')); render(); } });
+      AU.confirm({ title: 'Kosongkan formulir?', text: 'Semua jawaban di formulir ini akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { kept.clear(); history.replaceState(null, '', location.pathname + (EDIT ? '?edit=' + encodeURIComponent(EDIT.id) : '')); render(); } });
     });
     var idEl = form.querySelector('input[name="id"]');
     if (idEl) {
@@ -205,7 +209,7 @@
       netBox.innerHTML = GF.section(0, 'Jaringan', '', null, ' data-sec="net"') +
         (c.net === 'optional' && c.key !== 'printer' ? GF.q({ name: 'net_on', title: 'Apakah perangkat terhubung ke jaringan?', req: true, body: GF.radio('net_on', [{ value: 'ya', label: 'Ya, memiliki IP Address' }, { value: 'tidak', label: 'Tidak' }], kv('net_on', EDIT ? (EDIT.ip || EDIT.mac ? 'ya' : 'tidak') : '')) }) : '') +
         (c.key === 'printer' && !on ? '' : '') +
-        (on ? GF.q({ name: 'ip', title: 'IP Address', req: c.net === true && !c.dhcp, body: GF.text('ip', { mono: true, maxlength: 45, value: kv('ip', EDIT ? EDIT.ip : '') }) }) +
+        (on ? GF.q({ name: 'ip', title: 'IP Address', req: c.net === true && !c.dhcp, help: 'IP berubah-ubah? Tulis DHCP — boleh dipakai banyak perangkat.', body: GF.text('ip', { mono: true, maxlength: 45, value: kv('ip', EDIT ? EDIT.ip : '') }) }) +
           GF.q({ name: 'mac', title: 'MAC Address', body: GF.text('mac', { mono: true, maxlength: 17, value: kv('mac', EDIT ? EDIT.mac : '') }) }) : '');
     }
     if (!c || !c.spec.length) specBox.innerHTML = '';

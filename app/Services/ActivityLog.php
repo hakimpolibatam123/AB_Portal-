@@ -40,7 +40,7 @@ final class ActivityLog
     /** Objects of the filter; the former Suhu/CCTV/Clear Desk modules only name old rows. */
     public const ENTITIES = [
         'form_entry' => 'Laporan form', 'form' => 'Edit Isi Form', 'dashboard_card' => 'Kartu dashboard',
-        'dashboard_section' => 'Bagian dashboard', 'rekap' => 'Ekspor rekap', 'user' => 'Akun admin', 'asset' => 'Aset IT', 'mail_settings' => 'Pengaturan email',
+        'dashboard_section' => 'Bagian dashboard', 'rekap' => 'Ekspor rekap', 'user' => 'Akun admin', 'asset' => 'Aset IT', 'clearance' => 'Form Clearance', 'mail_settings' => 'Pengaturan email',
     ];
     private const OLD_ENTITIES = ['temperature_entry' => 'Suhu server', 'cctv_entry' => 'CCTV', 'cleardesk_session' => 'Clear Desk'];
 

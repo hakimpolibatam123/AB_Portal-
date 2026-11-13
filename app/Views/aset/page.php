@@ -8,6 +8,9 @@
 ?>
 <?php if ($asetPage === 'rekap'): ?>
 <main id="main-content" class="rs-page rs-page--wide">
+    <?php if ($recapView === ''): // Rekap & Daftar Perangkat: no head card; the back button already goes to the Aset IT menu. ?>
+    <h1 class="as-sr"><?= e($pageTitle) ?></h1>
+    <?php else: ?>
     <section class="rs-head">
         <div>
             <p class="rs-head__eyebrow">IT Asset Management</p>
@@ -19,7 +22,12 @@
             <a class="rs-btn rs-btn--onhead" href="<?= e(url('/aset')) ?>"><span data-i="layout-grid"></span>Menu Aset IT</a>
         </div>
     </section>
+    <?php endif; ?>
     <div id="as-app" aria-live="polite"><div class="rs-card"><div class="as-empty-inline">Memuat data aset…</div></div></div>
+</main>
+<?php elseif ($asetPage === 'progres-servis'): ?>
+<main id="main-content" class="rs-page rs-page--wide sp-page">
+    <div id="as-app" aria-live="polite"><div class="rs-card"><div class="as-empty-inline">Memuat data servis…</div></div></div>
 </main>
 <?php else: ?>
 <main id="main-content" class="gf-page">

@@ -692,13 +692,16 @@ final class AssetLedger
             'text' => mb_substr($text, 0, 500), 'at' => $this->now, 'by' => $this->by];
     }
 
-    /** IP, MAC and serial not used by another active device. IP and MAC are free text (no format check). */
+    /**
+     * IP, MAC and serial not used by another active device. IP and MAC are free text (no format check); an IP or MAC
+     * without any digit, such as "DHCP" or "-", is a note rather than an address, so any number of devices may share it.
+     */
     private function checkNetwork(array $d, ?string $exceptId): void
     {
         $labels = ['ip' => 'IP', 'mac' => 'MAC', 'serial' => 'Serial number'];
         foreach ($labels as $field => $label) {
             $value = strtoupper(trim((string) $d[$field]));
-            if ($value === '') {
+            if ($value === '' || ($field !== 'serial' && preg_match('/\d/', $value) !== 1)) {
                 continue;
             }
             foreach ($this->state['devices'] as $other) {

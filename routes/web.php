@@ -6,6 +6,7 @@ use App\Controllers\AssetController;
 use App\Controllers\AttentionController;
 use App\Controllers\AuditController;
 use App\Controllers\AuthController;
+use App\Controllers\ClearanceController;
 use App\Controllers\DashboardController;
 use App\Controllers\DynamicFormController;
 use App\Controllers\FileController;
@@ -26,6 +27,7 @@ $attention = new AttentionController();
 $files = new FileController();
 $asset = new AssetController();
 $mailSettings = new MailSettingsController();
+$clearance = new ClearanceController();
 
 // Every POST (public ones included) must carry the session's CSRF token.
 $router->middleware(new VerifyCsrf(), always: true);
@@ -67,9 +69,7 @@ $router->post('/form-editor/pratinjau', [$formEditor, 'preview']);
 // Dynamic forms (B6): fill-in page, reports saved on the server, history (DynamicFormController).
 $router->get('/form-dinamis', [$dynamicForm, 'fill']);
 $router->post('/form-dinamis/entri', [$dynamicForm, 'store']);
-$router->get('/form-dinamis/entri/{id}/ubah', [$dynamicForm, 'edit']);
-$router->post('/form-dinamis/entri/{id}', [$dynamicForm, 'update']);
-$router->post('/form-dinamis/entri/{id}/hapus', [$dynamicForm, 'destroy']);
+// A sent report is read only (no Ubah or Hapus), like a disposal record.
 $router->get('/form-dinamis/entri/{id}', [$dynamicForm, 'detail']);
 $router->get('/form-dinamis/respons', [$dynamicForm, 'responses']);
 $router->get('/form-dinamis/respons/data', [$dynamicForm, 'data']);
@@ -78,6 +78,15 @@ $router->get('/form-dinamis/respons/ekspor', [$dynamicForm, 'export']);
 $router->post('/form-dinamis/tanda-tangan', [$dynamicForm, 'saveSignature']);
 
 // Aset IT (IT Asset Management): menu, forms, recap; records as JSON and the operations of one submit.
+// Form Clearance of leaving employees (side menu).
+$router->get('/clearance', [$clearance, 'index']);
+$router->get('/clearance/isi', [$clearance, 'form']);
+$router->get('/clearance/pdf', [$clearance, 'pdf']);
+$router->get('/clearance/excel', [$clearance, 'excel']);
+$router->post('/clearance/simpan', [$clearance, 'save']);
+$router->post('/clearance/hapus', [$clearance, 'delete']);
+$router->post('/clearance/berkas', [$clearance, 'upload']);
+
 $router->get('/aset', [$asset, 'index']);
 $router->get('/aset/registrasi', [$asset, 'registrasi']);
 $router->get('/aset/registrasi/template', [$asset, 'importTemplate']);
@@ -85,6 +94,7 @@ $router->post('/aset/registrasi/impor', [$asset, 'import']);
 $router->get('/aset/penempatan', [$asset, 'penempatan']);
 $router->get('/aset/lacak', [$asset, 'lacak']);
 $router->get('/aset/servis', [$asset, 'servis']);
+$router->get('/aset/progres-servis', [$asset, 'progresServis']);
 $router->get('/aset/disposal', [$asset, 'disposal']);
 $router->get('/aset/serah-terima', [$asset, 'serahTerima']);
 $router->get('/aset/serah-terima/pdf', [$asset, 'serahTerimaPdf']);

@@ -32,6 +32,8 @@ final class AssetController extends Controller
         'registrasi' => ['Registrasi Perangkat', 'aset/aset-register.js'],
         'lacak' => ['Penempatan & Lacak Perangkat', 'aset/aset-track.js'],
         'servis' => ['Servis & Pemeliharaan', 'aset/aset-service.js'],
+        // Progress of the services: open tickets, their status change and history (the Servis form only reports).
+        'progres-servis' => ['Progres Servis', 'aset/aset-progress.js'],
         'disposal' => ['Disposal Perangkat', 'aset/aset-disposal.js'],
         'serah-terima' => ['Serah Terima Perangkat', 'aset/aset-handover.js'],
         'rekap' => ['Rekap & Daftar Perangkat', 'aset/aset-rekap.js'],
@@ -138,6 +140,8 @@ final class AssetController extends Controller
     }
     public function lacak(): void { $this->page('lacak'); }
     public function servis(): void { $this->page('servis'); }
+
+    public function progresServis(): void { $this->page('progres-servis'); }
     public function disposal(): void { $this->page('disposal'); }
     public function serahTerima(): void { $this->page('serah-terima'); }
     public function rekapSerahTerima(): void { $this->page('rekap', 'serah-terima'); }
@@ -368,10 +372,15 @@ final class AssetController extends Controller
             'backHref' => url('/aset'),
             'backLabel' => 'Kembali ke Dashboard Aset IT',
             // Forms: the button sits beside the 760 px column on wide screens, like the dynamic forms.
-            'breadcrumbWidth' => $key === 'rekap' ? '' : 'breadcrumb-fill',
+            'breadcrumbWidth' => $key === 'rekap' || $key === 'progres-servis' ? '' : 'breadcrumb-fill',
+            // Progres Servis has no head card: its two links sit at the right of the back button row.
+            'breadcrumbAside' => $key === 'progres-servis'
+                ? '<div class="sp-aside"><a class="rs-btn rs-btn--sm2" href="' . e(url('/aset/rekap-servis')) . '">' . card_icon('chart-column', 'size-4') . 'Lihat Rekap</a>'
+                    . '<a class="rs-btn rs-btn--primary rs-btn--sm2" href="' . e(url('/aset/servis')) . '">' . card_icon('circle-plus', 'size-4') . 'Lapor Servis Baru</a></div>'
+                : null,
             'bodyClass' => 'aset-shell',
             'pageStyles' => ['aset/aset-theme.css', 'aset/aset.css'],
-            'pageScripts' => ['aset/icons.js', 'aset/aset-shim.js', 'aset/aset-store.js', 'aset/aset-ui.js', 'aset/aset-gf.js', $script],
+            'pageScripts' => ['aset/icons.js', 'aset/aset-shim.js', 'aset/aset-store.js', 'aset/aset-ui.js', 'aset/aset-gf.js', 'aset/aset-sign.js', $script],
             'bodyData' => ['data-aset-diag' => url_base() . '/aset/diagnosa', 'data-aset-api' => url_base() . '/aset', 'data-user-name' => trim((string) ($user['name'] ?? '')) ?: 'Admin', 'data-page' => 'aset-' . $key, 'data-rekap-view' => $view !== '' ? $view : null],
         ], 'main');
     }

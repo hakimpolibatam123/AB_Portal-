@@ -31,13 +31,11 @@ use Throwable;
  * their reports are saved on the server (form_entries) with the version they were filled in. Routes:
  *   GET  /form-dinamis?id=<slug>                           fill-in page (public/assets/js/form-dinamis.js)
  *   POST /form-dinamis/entri?id=<slug>                     save a report (multipart, X-CSRF-Token) → JSON
- *   GET  /form-dinamis/entri/{id}/ubah                     the same page with a report (its own version)
- *   POST /form-dinamis/entri/{id}                          save changes → JSON
- *   POST /form-dinamis/entri/{id}/hapus                    soft delete with a reason of 10–500 characters → JSON
  *   GET  /form-dinamis/respons?id=<slug>                   recap page (public/assets/js/rekap.js)
  *   GET  /form-dinamis/respons/data?id=<slug>              rows and statistics → JSON
  *   GET  /form-dinamis/respons/ekspor?id=<slug>&format=…    Excel, PDF or print of the filtered reports (PRD §9)
- *   GET  /form-dinamis/entri/{id}                          detail with the change history → JSON
+ *   GET  /form-dinamis/entri/{id}                          detail with the history → JSON
+ * A sent report is read only: it is not changed or removed afterwards (like a disposal record).
  */
 final class DynamicFormController extends Controller
 {
@@ -48,7 +46,7 @@ final class DynamicFormController extends Controller
     {
         $form = $this->formOrRedirect();
         if ($form !== null) {
-            $this->page($form, null);
+            $this->page($form);
         }
     }
 
@@ -117,92 +115,6 @@ final class DynamicFormController extends Controller
         $answer = ['entry_no' => $entryNo, 'rekap_url' => $this->urls($form)['rekap']];
         FormToken::markUsed($form['slug'], (string) $token, $answer);
         json_response(['message' => 'Laporan tersimpan'] + $answer, 201);
-    }
-
-    public function edit(array $params): void
-    {
-        $entry = $this->entries()->find((int) $params['id']);
-        $form = $entry !== null ? $this->model()->formBySlug($entry['slug']) : null;
-        if ($entry === null || $form === null) {
-            $this->notFound();
-            return;
-        }
-        $this->page($form, $entry);
-    }
-
-    public function update(array $params): void
-    {
-        if ($this->tooLarge()) {
-            return;
-        }
-        $entry = $this->entries()->find((int) $params['id']);
-        if ($entry === null || $entry['form_deleted_at'] !== null) {
-            json_response(['message' => 'Laporan tidak ditemukan. Mungkin sudah dihapus.'], 404);
-            return;
-        }
-        // A report is changed with the questions of its own version.
-        $items = FormDefinition::answerItems($this->definition($entry['definition_json']));
-        $old = json_decode((string) $entry['answers_json'], true) ?: [];
-        $check = FormAnswers::check($items, $_POST, $this->uploadedFiles($items), $old);
-        if ($check['errors'] !== []) {
-            $this->invalid($check['errors']);
-            return;
-        }
-        $changes = $this->changes($items, $old, $check['answers'], $check['uploads']);
-        $rekap = $this->urls($this->model()->formBySlug($entry['slug']) ?? ['slug' => $entry['slug']])['rekap'];
-        if ($changes === []) {
-            json_response(['message' => 'Tidak ada perubahan', 'entry_no' => $entry['entry_no'], 'rekap_url' => $rekap]);
-            return;
-        }
-        $pdo = Database::connection();
-        try {
-            $pdo->beginTransaction();
-            $answers = $this->withFiles($pdo, (int) $entry['id'], $check['answers'], $check['uploads']);
-            (new Attachment($pdo))->deleteIds(self::OWNER, (int) $entry['id'], $check['removed']);
-            (new FormEntries($pdo))->update((int) $entry['id'], $this->stored($items, $answers));
-            Audit::log('update', self::OWNER, (int) $entry['id'], ['changes' => $changes], $entry['entry_no'], pdo: $pdo);
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            error_log('Form dinamis ubah: ' . $exception->getMessage());
-            json_response(['message' => 'Perubahan tidak tersimpan. Coba lagi.'], 500);
-            return;
-        }
-        json_response(['message' => 'Perubahan tersimpan', 'entry_no' => $entry['entry_no'], 'rekap_url' => $rekap]);
-    }
-
-    public function destroy(array $params): void
-    {
-        $entry = $this->entries()->find((int) $params['id']);
-        if ($entry === null) {
-            json_response(['message' => 'Laporan tidak ditemukan. Mungkin sudah dihapus.'], 404);
-            return;
-        }
-        $input = json_decode((string) file_get_contents('php://input'), true);
-        $reason = is_array($input) && is_string($input['alasan'] ?? null) ? trim((string) preg_replace('/\s+/u', ' ', $input['alasan'])) : '';
-        $length = mb_strlen($reason);
-        if ($length < 10 || $length > 500) {
-            $this->invalid(['alasan' => 'Alasan hapus 10–500 karakter.']);
-            return;
-        }
-        $pdo = Database::connection();
-        try {
-            $pdo->beginTransaction();
-            (new FormEntries($pdo))->delete((int) $entry['id'], $reason);
-            (new Attachment($pdo))->deleteForOwner(self::OWNER, (int) $entry['id']);
-            Audit::log('delete', self::OWNER, (int) $entry['id'], [], $entry['entry_no'], $reason, $pdo);
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            error_log('Form dinamis hapus: ' . $exception->getMessage());
-            json_response(['message' => 'Laporan tidak terhapus. Coba lagi.'], 500);
-            return;
-        }
-        json_response(['message' => 'Laporan dihapus', 'entry_no' => $entry['entry_no']]);
     }
 
     /** GET /form-dinamis/respons/data?id=<slug>: rows and statistics for the filters in the query. */
@@ -342,13 +254,11 @@ final class DynamicFormController extends Controller
             'sub' => 'Dikirim ' . Format::dateTime($entry['created_at']),
             'fields' => $fields,
             'history' => Audit::history(self::OWNER, (int) $entry['id'], $entry['entry_no'], $labels),
-            'edit_url' => url('/form-dinamis/entri/' . $entry['id'] . '/ubah'),
-            'delete_url' => url('/form-dinamis/entri/' . $entry['id'] . '/hapus'),
         ]);
     }
 
-    /** The fill-in page of a form (new report) or of a report being changed (with its own version). */
-    private function page(array $form, ?array $entry): void
+    /** The fill-in page of a form: a new report (a sent report is read only, so it is never opened here again). */
+    private function page(array $form): void
     {
         $data = $this->dashboardData(withQuestions: true);
         if ($data === null) {
@@ -358,38 +268,17 @@ final class DynamicFormController extends Controller
             $this->notFound();
             return;
         }
-        $urls = $this->urls($form);
-        $editing = null;
-        $prefill = [];
-        if ($entry !== null) {
-            $definition = $this->definition($entry['definition_json']);
-            $data['forms'][$form['slug']] = ['submitLabel' => 'Simpan Perubahan', 'title' => $entry['version_title'], 'description' => $entry['version_description']] + $definition;
-            $answers = json_decode((string) $entry['answers_json'], true) ?: [];
-            $prefill = FormRecap::prefill(FormDefinition::answerItems($definition), $answers);
-            $fileMap = [];
-            foreach (FormDefinition::answerItems($definition) as $q) {
-                if ($q['type'] === 'file' && is_array($answers[$q['id']] ?? null)) {
-                    $fileMap[$q['id']] = array_map(static fn (array $f): array => ['id' => (int) $f['id'], 'name' => (string) $f['name'], 'url' => url('/berkas/' . (int) $f['id'])], array_filter($answers[$q['id']], 'is_array'));
-                }
-            }
-            $editing = [
-                'id' => (int) $entry['id'],
-                'entry_no' => $entry['entry_no'],
-                'fileMap' => (object) $fileMap,
-                'cancel_url' => $urls['rekap'],
-            ];
-        }
         $this->render('form-dinamis/fill', [
-            'pageTitle' => $entry !== null ? 'Ubah ' . $entry['entry_no'] : (string) $form['title'],
+            'pageTitle' => (string) $form['title'],
             'portalPage' => true,
             'backToDashboard' => true,
             'breadcrumbWidth' => 'breadcrumb-fill',
             'formId' => $form['slug'],
-            'submitUrl' => $entry !== null ? url('/form-dinamis/entri/' . $entry['id']) : url('/form-dinamis/entri') . '?' . http_build_query(['id' => $form['slug']]),
-            'formToken' => $entry === null ? FormToken::issue($form['slug']) : null,
-            'formVersion' => $entry === null ? (int) $form['current_version_id'] : null,
-            'prefill' => $prefill,
-            'editing' => $editing,
+            'submitUrl' => url('/form-dinamis/entri') . '?' . http_build_query(['id' => $form['slug']]),
+            'formToken' => FormToken::issue($form['slug']),
+            'formVersion' => (int) $form['current_version_id'],
+            'prefill' => [],
+            'editing' => null,
             'clientState' => DashboardData::clientState($data),
             'iconNames' => DashboardData::iconNames($data, self::ICONS),
             'pageScripts' => ['js/dashboard-store.js', 'js/question-ui.js', 'js/form-dinamis.js'],
@@ -443,28 +332,6 @@ final class DynamicFormController extends Controller
             'search_text' => FormAnswers::searchText($items, $answers),
             'attention' => FormAnswers::attention($items, $answers) ? 1 : 0,
         ];
-    }
-
-    /** Changed answers as people read them (old → new), files by name. */
-    private function changes(array $items, array $old, array $new, array $uploads): array
-    {
-        $text = static function (array $q, mixed $value): ?string {
-            $shown = $value === null ? null : FormAnswers::display($q, $value);
-            return $shown === null ? null : $shown['text'];
-        };
-        $changes = [];
-        foreach ($items as $q) {
-            $after = $new[$q['id']] ?? null;
-            if ($q['type'] === 'file' && isset($uploads[$q['id']]) && $uploads[$q['id']] !== []) {
-                $after = [...(is_array($after) ? $after : []), ...array_map(static fn (array $u): array => ['id' => 0, 'name' => $u['name'] . ' (baru)'], $uploads[$q['id']])];
-            }
-            $before = $text($q, $old[$q['id']] ?? null);
-            $afterText = $text($q, $after);
-            if ($before !== $afterText) {
-                $changes[] = ['field' => $q['id'], 'old' => $before, 'new' => $afterText];
-            }
-        }
-        return $changes;
     }
 
     /** Files per question of the request: <id> (one) or <id>[] (several), each as one $_FILES entry. */

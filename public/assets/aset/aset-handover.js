@@ -5,11 +5,10 @@
   'use strict';
   var AS = window.AS, AU = window.AU, GF = window.GF, esc = AU.esc, ic = AU.ic;
   var app = document.getElementById('as-app');
-  var LIST = [], form = null, finder = null, slots = {};
+  var LIST = [], form = null, finder = null, slots = {}, kept = null;
   var CONDITIONS = ['Baik, berfungsi normal', 'Baik, ada catatan', 'Rusak ringan'];
-  // Handwriting fonts of the viewer's system; the signature is saved as a picture, so it looks the same everywhere.
-  var FONTS = ["'Segoe Script','Snell Roundhand',cursive", "'Lucida Handwriting','Bradley Hand',cursive", "'Ink Free','Noteworthy','Brush Script MT',cursive"];
-  var PAD_W = 720, PAD_H = 320;
+  // The signature window (Ketik / Gambar / Unggah) is ASign.dialog, shared with Form Clearance (aset-sign.js).
+  var PAD_W = window.ASign.PAD_W, PAD_H = window.ASign.PAD_H;
 
   AS.ready().then(function () {
     AU.consumeFlash();
@@ -20,91 +19,7 @@
     if (b) { var d = AS.get(b); if (d) finder.set(d); else finder.find(b); }
   }).catch(AU.fail);
 
-  /* ---------------- signature: trim, dialog, slot ---------------- */
-
-  /* The canvas cropped to its ink, or null when it is empty. */
-  function trim(c) {
-    var w = c.width, h = c.height, px = c.getContext('2d').getImageData(0, 0, w, h).data, x0 = w, y0 = h, x1 = -1, y1 = -1;
-    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3] > 12) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    if (x1 < 0) return null;
-    var out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
-    out.getContext('2d').drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
-    return out;
-  }
-  function typed(text, font) {
-    var c = document.createElement('canvas'); c.width = 1400; c.height = 360;
-    var g = c.getContext('2d'); g.font = '110px ' + font; g.fillStyle = '#16233f'; g.textBaseline = 'middle'; g.fillText(text, 30, 180);
-    return trim(c);
-  }
-  /* A photo or scan of a signature: scaled down, and its white paper made transparent. */
-  function fromImage(img) {
-    var k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
-    var g = c.getContext('2d'); g.drawImage(img, 0, 0, c.width, c.height);
-    var d = g.getImageData(0, 0, c.width, c.height), p = d.data;
-    for (var i = 0; i < p.length; i += 4) { var v = Math.min(p[i], p[i + 1], p[i + 2]); if (v > 205) p[i + 3] = 0; else if (v > 150) p[i + 3] = Math.round(p[i + 3] * (205 - v) / 55); }
-    g.putImageData(d, 0, 0);
-    return trim(c);
-  }
-
-  /* The window with Ketik / Gambar / Unggah. done(canvas) receives the signature. */
-  function signDialog(name, done) {
-    var mode = 'type', ink = '#16233f', upload = null, drawing = false, last = null;
-    var m = AU.modal({ title: 'Tanda Tangan', size: 'md',
-      body: '<div class="pm-tabs as-scan-tabs" role="tablist">' +
-        '<button type="button" role="tab" aria-selected="true" data-mode="type">' + ic('type') + ' Ketik</button>' +
-        '<button type="button" role="tab" aria-selected="false" data-mode="draw">' + ic('pencil') + ' Gambar</button>' +
-        '<button type="button" role="tab" aria-selected="false" data-mode="upload">' + ic('upload') + ' Unggah</button></div>' +
-        '<div data-sig="type"><label class="as-sig-label" for="sig-name">Nama</label><input class="pm-input" id="sig-name" maxlength="60" value="' + esc(name) + '">' +
-        '<div class="as-sig-styles">' + FONTS.map(function (f, i) { return '<label class="as-sig-style"><input type="radio" name="sigfont" value="' + i + '"' + (i ? '' : ' checked') + '>' + ic('check') + '<span data-preview style="font-family:' + esc(f) + '"></span></label>'; }).join('') + '</div></div>' +
-        '<div data-sig="draw" hidden><canvas class="as-sig-draw" width="' + PAD_W + '" height="' + PAD_H + '"></canvas><div class="as-sig-tools"><span class="as-sig-inks">' +
-        ['#16233f', '#1d4ed8', '#111111'].map(function (c, i) { return '<button type="button" class="as-sig-ink" data-ink="' + c + '" style="background:' + c + '" aria-label="Warna tinta ' + (i + 1) + '" aria-pressed="' + (i ? 'false' : 'true') + '"></button>'; }).join('') + '</span>' +
-        '<button type="button" class="as-textbtn" data-clear-ink>Hapus coretan</button></div></div>' +
-        '<div data-sig="upload" hidden><label class="gf-drop as-sig-drop"><input type="file" accept="image/png,image/jpeg" data-file hidden>' + ic('upload') + '<span class="gf-drop__title">Pilih foto atau gambar tanda tangan</span><span class="gf-drop__formats">JPG atau PNG · maks. 10 MB · latar putih dihapus otomatis</span></label>' +
-        '<canvas class="as-sig-preview" hidden></canvas></div>' +
-        '<p class="pm-err" data-sigerr hidden>' + ic('circle-alert') + '<span class="as-errt"></span></p>',
-      foot: '<button type="button" class="rs-btn rs-btn--ghost" data-x>Batal</button><button type="submit" class="rs-btn rs-btn--primary">' + ic('check') + ' Gunakan</button>',
-      onSubmit: function (api) {
-        var c = mode === 'type' ? (input.value.trim() ? typed(input.value.trim(), FONTS[+api.$('[name="sigfont"]:checked').value]) : null) : mode === 'draw' ? trim(pad) : upload;
-        if (!c) return fail(mode === 'type' ? 'Ketik nama terlebih dahulu.' : mode === 'draw' ? 'Buat coretan tanda tangan terlebih dahulu.' : 'Pilih gambar tanda tangan terlebih dahulu.');
-        api.close(); done(c);
-      } });
-    var input = m.$('#sig-name'), pad = m.$('.as-sig-draw'), g = pad.getContext('2d'), err = m.$('[data-sigerr]');
-    function fail(t) { err.hidden = !t; err.querySelector('.as-errt').textContent = t || ''; }
-    function previews() { m.$$('[data-preview]').forEach(function (s) { s.textContent = input.value || 'Tanda tangan'; }); }
-    previews(); input.addEventListener('input', function () { fail(''); previews(); });
-    m.$$('[data-mode]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        mode = b.getAttribute('data-mode'); fail('');
-        m.$$('[data-mode]').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
-        m.$$('[data-sig]').forEach(function (p) { p.hidden = p.getAttribute('data-sig') !== mode; });
-      });
-    });
-    function at(e) { var r = pad.getBoundingClientRect(); return [(e.clientX - r.left) * PAD_W / r.width, (e.clientY - r.top) * PAD_H / r.height]; }
-    pad.addEventListener('pointerdown', function (e) { drawing = true; last = at(e); pad.setPointerCapture(e.pointerId); g.fillStyle = ink; g.beginPath(); g.arc(last[0], last[1], 2, 0, 7); g.fill(); fail(''); });
-    pad.addEventListener('pointermove', function (e) {
-      if (!drawing) return;
-      var p = at(e); g.strokeStyle = ink; g.lineWidth = 4; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(last[0], last[1]); g.lineTo(p[0], p[1]); g.stroke(); last = p;
-    });
-    ['pointerup', 'pointercancel'].forEach(function (ev) { pad.addEventListener(ev, function () { drawing = false; }); });
-    m.$('[data-clear-ink]').addEventListener('click', function () { g.clearRect(0, 0, PAD_W, PAD_H); });
-    m.$$('[data-ink]').forEach(function (b) { b.addEventListener('click', function () { ink = b.getAttribute('data-ink'); m.$$('[data-ink]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); }); }); });
-    m.$('[data-file]').addEventListener('change', function (e) {
-      var f = e.target.files && e.target.files[0]; e.target.value = ''; upload = null; fail('');
-      var view = m.$('.as-sig-preview'); view.hidden = true;
-      if (!f) return;
-      if (!/^image\/(png|jpeg)$/.test(f.type)) return fail('Pilih gambar JPG atau PNG.');
-      if (f.size > 10 * 1024 * 1024) return fail('Ukuran gambar lebih dari 10 MB.');
-      var url = URL.createObjectURL(f), img = new Image();
-      img.onload = function () {
-        upload = fromImage(img); URL.revokeObjectURL(url);
-        if (!upload) return fail('Tanda tangan tidak terlihat di gambar ini.');
-        view.width = upload.width; view.height = upload.height; view.getContext('2d').drawImage(upload, 0, 0); view.hidden = false;
-      };
-      img.onerror = function () { URL.revokeObjectURL(url); fail('Gambar tidak dapat dibaca.'); };
-      img.src = url;
-    });
-  }
+  /* ---------------- signature slot (the window itself is ASign.dialog) ---------------- */
 
   /* One signature box: the signature is dragged to its place on the box and resized; blob() is what is saved. */
   function slot(box, label, nameOf) {
@@ -125,7 +40,7 @@
     function show() { var on = !!img; pad.hidden = !on; empty.hidden = on; tools.hidden = !on; hint.hidden = !on; if (on) paint(pad.getContext('2d'), true); }
     function set(c) { img = c; cx = 0.5; cy = 0.5; w = Math.min(0.7, 0.72 * PAD_H / c.height * c.width / PAD_W); size.value = Math.round(w * 100); show(); }
     function at(e) { var r = pad.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; }
-    box.querySelectorAll('[data-sign]').forEach(function (b) { b.addEventListener('click', function () { signDialog(nameOf(), set); }); });
+    box.querySelectorAll('[data-sign]').forEach(function (b) { b.addEventListener('click', function () { window.ASign.dialog(nameOf(), set); }); });
     box.querySelector('[data-remove]').addEventListener('click', function () { img = null; show(); });
     size.addEventListener('input', function () { w = +size.value / 100; show(); });
     pad.addEventListener('pointerdown', function (e) { var p = at(e); drag = [p[0] - cx, p[1] - cy]; pad.setPointerCapture(e.pointerId); });
@@ -165,18 +80,24 @@
         if (LIST.some(function (x) { return x.id === d.id; })) return d.name + ' sudah ada di daftar.';
         return ['servis', 'disposal'].indexOf(d.status) !== -1 ? d.name + ' berstatus ' + AS.STATUS[d.status].label + ', tidak dapat diserahterimakan.' : null;
       },
-      onPick: function (d) { LIST.push(d); finder.input.value = ''; GF.err(form, 'barcode', ''); drawList(); finder.input.focus(); }, onInput: function () { GF.err(form, 'barcode', ''); } });
+      onPick: function (d) { LIST.push(d); finder.input.value = ''; GF.err(form, 'barcode', ''); drawList(); finder.input.focus(); if (kept) kept.touch(); }, onInput: function () { GF.err(form, 'barcode', ''); } });
     AU.render(app); GF.wire(form);
     slots.from = slot(form.querySelector('[data-slot="from"]'), 'Yang Menyerahkan', function () { return GF.val(form, 'fromName'); });
     slots.to = slot(form.querySelector('[data-slot="to"]'), 'Yang Menerima', function () { return GF.val(form, 'toName'); });
     form.addEventListener('submit', function (e) { e.preventDefault(); submit(); });
     form.querySelector('[data-reset]').addEventListener('click', function () {
-      AU.confirm({ title: 'Kosongkan formulir?', text: 'Jawaban yang sudah diisi akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { history.replaceState(null, '', 'serah-terima'); render(); } });
+      AU.confirm({ title: 'Kosongkan formulir?', text: 'Jawaban yang sudah diisi akan dihapus.', ok: 'Kosongkan' }).then(function (ok) { if (ok) { kept.clear(); history.replaceState(null, '', 'serah-terima'); render(); } });
     });
     form.querySelector('[data-list]').addEventListener('click', function (e) {
       var b = e.target.closest('[data-drop-dev]'); if (!b) return;
-      LIST.splice(+b.getAttribute('data-drop-dev'), 1); drawList();
+      LIST.splice(+b.getAttribute('data-drop-dev'), 1); drawList(); kept.touch();
     });
+    // Unsent answers and the devices listed come back after leaving the page (asked first); signatures are not
+    // kept. Opened with a device (?barcode=), "Pakai Data Tadi" adds the earlier devices to it.
+    kept = GF.draft(form, { key: 'serah-terima', title: 'Serah Terima Perangkat', extraCounts: true,
+      extra: function () { return LIST.map(function (d) { return d.id; }).join(','); },
+      label: function (dr) { var n = dr.extra ? dr.extra.split(',').length : 0; return (n ? n + ' perangkat' : '') + (dr.values.toName ? (n ? ', diterima ' : 'Diterima ') + dr.values.toName : ''); },
+      restore: function (ids) { (ids ? ids.split(',') : []).forEach(function (id) { var x = AS.get(id); if (x && !LIST.some(function (y) { return y.id === id; })) finder.set(x); }); } });
   }
 
   function drawList() {
@@ -195,7 +116,8 @@
     if (date > AU.today()) { GF.err(form, 'date', 'Tanggal tidak boleh di masa depan.'); ok = false; }
     if (!ok) return GF.firstErr(form);
     var toName = GF.val(form, 'toName'), toDept = GF.val(form, 'toDept'), btn = form.querySelector('button[type="submit"]');
-    AU.confirm({ title: 'Simpan serah terima?', ok: 'Ya, simpan', text: '<b>' + LIST.length + ' perangkat</b> akan tercatat di bawah tanggung jawab <b>' + esc(toName) + '</b>, departemen <b>' + esc(toDept) + '</b>.' }).then(function (yes) {
+    // Saved, then its PDF downloads at once on the page of the saved serah terima (?unduh=1, see detail).
+    AU.confirm({ title: 'Simpan serah terima?', ok: 'Simpan & Unduh PDF', text: '<b>' + LIST.length + ' perangkat</b> akan tercatat di bawah tanggung jawab <b>' + esc(toName) + '</b>, departemen <b>' + esc(toDept) + '</b>. PDF serah terima langsung diunduh setelah tersimpan.' }).then(function (yes) {
       if (!yes) return;
       btn.disabled = true;
       var input = { deviceIds: LIST.map(function (d) { return d.id; }), date: date, fromName: GF.val(form, 'fromName'), fromRole: GF.val(form, 'fromRole'), toName: toName, toRole: GF.val(form, 'toRole'), toDept: toDept, condition: GF.val(form, 'condition'), note: GF.val(form, 'note') };
@@ -203,7 +125,7 @@
         return slots.to.blob('ttd-menerima.png').then(function (to) {
           input.signFrom = from; input.signTo = to;
           var r = AS.handover(input);
-          return AS.save().then(function () { AU.flash('Serah terima tersimpan', r.id); location.href = 'serah-terima?id=' + encodeURIComponent(r.id); });
+          return AS.save().then(function () { kept.clear(); AU.flash('Serah terima tersimpan', r.id + ' · PDF sedang diunduh'); location.href = 'serah-terima?id=' + encodeURIComponent(r.id) + '&unduh=1'; });
         });
       }).catch(function (err) { btn.disabled = false; AU.fail(err); });
     });
@@ -213,6 +135,11 @@
 
   function detail(r) {
     var pdf = 'serah-terima/pdf?id=' + encodeURIComponent(r.id);
+    // Just saved (?unduh=1): the PDF downloads once; the address is cleaned so a reload does not download it again.
+    if (AU.qs('unduh') === '1') {
+      history.replaceState(null, '', 'serah-terima?id=' + encodeURIComponent(r.id));
+      setTimeout(function () { var a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); a.remove(); }, 400);
+    }
     document.title = r.id + ' - Serah Terima Perangkat - Portal Monitoring IT RS Awal Bros Botania';
     var sign = function (role, label, file, name) {
       return '<div>' + (file ? '<div class="as-sig"><div class="as-sig__label">' + esc(label) + '</div><div class="as-sig__box"><img class="as-sig__img" src="' + esc(AS.fileUrl(file)) + '" alt="Tanda tangan ' + esc(name) + '"></div></div>'

@@ -84,4 +84,26 @@
   window.addEventListener('pageshow', (event) => {
     if (event.persisted) setSubmitting(false);
   });
+
+  // The form is in a window opened by "Masuk" in the header; it opens by itself after a refused login or a notice.
+  const dialog = document.getElementById('login-card');
+  if (dialog && typeof dialog.showModal === 'function') {
+    const open = () => {
+      if (!dialog.open) dialog.showModal();
+      const target = fields.username.input.value ? fields.password.input : fields.username.input;
+      target.focus();
+    };
+    document.querySelectorAll('[data-open-login]').forEach((button) => button.addEventListener('click', open));
+    dialog.querySelectorAll('[data-close-login]').forEach((button) => button.addEventListener('click', () => dialog.close()));
+    // A click on the dimmed backdrop (outside the box) closes it, unless a login is being sent.
+    dialog.addEventListener('click', (event) => {
+      if (event.target !== dialog || state.submitting) return;
+      const r = dialog.getBoundingClientRect();
+      if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
+    });
+    dialog.addEventListener('cancel', (event) => { if (state.submitting) event.preventDefault(); });
+    if (dialog.hasAttribute('data-autoopen')) open();
+  } else if (dialog) {
+    dialog.setAttribute('open', ''); // very old browsers: the form simply shows
+  }
 })();

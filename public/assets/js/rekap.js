@@ -3,8 +3,8 @@
 
   /* Recap of a form as a sheet (app/Views/form-dinamis/rekap-form.php). Columns, rows, statistic cards and the
      paging line come from the server as JSON. The filters live in the URL: every change replaces the address and
-     loads the data again (search 300 ms after typing stops). Sorting by a header, a detail dialog with the change
-     history, Ubah and Hapus. Cells: { text, chip, tone, link, clamp }. */
+     loads the data again (search 300 ms after typing stops). Sorting by a header, and a read-only detail dialog
+     with the history (a sent report is not changed or removed). Cells: { text, chip, tone, link, clamp }. */
   const store = window.DashboardStore;
   const page = document.querySelector('[data-recap]');
   if (!store || !page) return;
@@ -197,20 +197,17 @@
   });
   window.addEventListener('popstate', () => { fromUrl(); load(false); });
 
-  /* ---------- Detail, Ubah, Hapus ---------- */
+  /* ---------- Detail (read only: a sent report is not changed or removed, like a disposal record) ---------- */
   const detail = $('#fr-detail');
-  const removal = $('#fr-delete');
   let opener = null;
-  let current = null;
   const closeOnBackdrop = (dialog) => dialog.addEventListener('click', (event) => {
     if (event.target !== dialog) return;
     const r = dialog.getBoundingClientRect();
     if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) dialog.close();
   });
   closeOnBackdrop(detail);
-  closeOnBackdrop(removal);
   $$('[data-detail-close]', detail).forEach((button) => button.addEventListener('click', () => detail.close()));
-  detail.addEventListener('close', () => { if (!removal.open) opener?.focus({ preventScroll: true }); });
+  detail.addEventListener('close', () => { opener?.focus({ preventScroll: true }); });
 
   const openDetail = async (id, from) => {
     opener = from;
@@ -222,7 +219,6 @@
       if (error.status === 404) load(false);
       return;
     }
-    current = answer;
     $('[data-detail-title]', detail).textContent = answer.title;
     $('[data-detail-sub]', detail).textContent = answer.sub;
     // A field { heading } starts a new group (a section of a dynamic form).
@@ -234,50 +230,10 @@
       + (h.changes.length ? `<ul class="fr-history__changes">${h.changes.map((c) => `<li><span>${esc(c.field)}</span>: <s>${esc(c.old)}</s> → <b>${esc(c.new)}</b></li>`).join('')}</ul>` : '')
       + '</li>').join('');
     $('[data-detail-body]', detail).innerHTML = `<dl class="fr-detail__list">${fields}</dl>`
-      + `<h3 class="fr-detail__section">Riwayat perubahan</h3><ul class="fr-history">${history}</ul>`;
-    $('[data-detail-edit]', detail).href = answer.edit_url;
+      + (history ? `<h3 class="fr-detail__section">Riwayat</h3><ul class="fr-history">${history}</ul>` : '');
     detail.showModal();
     $('[data-detail-close]', detail).focus();
   };
-
-  const reason = $('[data-delete-reason]', removal);
-  const reasonError = $('[data-delete-error]', removal);
-  const go = $('[data-delete-go]', removal);
-  $('[data-detail-delete]', detail).addEventListener('click', () => {
-    $('[data-delete-no]', removal).textContent = current?.title ?? '';
-    reason.value = '';
-    reasonError.hidden = true;
-    reason.removeAttribute('aria-invalid');
-    $('[data-delete-count]', removal).textContent = '0';
-    removal.showModal();
-    reason.focus();
-  });
-  $('[data-delete-cancel]', removal).addEventListener('click', () => removal.close());
-  removal.addEventListener('close', () => { if (detail.open) $('[data-detail-delete]', detail).focus(); });
-  reason.addEventListener('input', () => {
-    $('[data-delete-count]', removal).textContent = String(reason.value.length);
-    reasonError.hidden = true;
-    reason.removeAttribute('aria-invalid');
-  });
-  const fail = (message) => { reasonError.textContent = message; reasonError.hidden = false; reason.setAttribute('aria-invalid', 'true'); reason.focus(); };
-  $('[data-delete-form]', removal).addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const text = reason.value.trim();
-    if (text.length < 10 || text.length > 500) { fail('Alasan hapus 10–500 karakter.'); return; }
-    if (!current || go.disabled) return;
-    go.disabled = true;
-    try {
-      const answer = await api(current.delete_url, { alasan: text });
-      removal.close();
-      detail.close();
-      showToast('Entri dihapus', `${answer.entry_no} tidak lagi tampil di rekap. Data tetap disimpan untuk audit.`);
-      load(false);
-    } catch (error) {
-      if (error.errors?.alasan) fail(error.errors.alasan); else apiError(error);
-    } finally {
-      go.disabled = false;
-    }
-  });
 
   /* "Tanda tangan": the signature block of the PDF and Cetak export, saved for this form on the server. */
   const signDialog = document.getElementById('fr-sign');

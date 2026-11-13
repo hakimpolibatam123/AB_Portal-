@@ -7,6 +7,7 @@ use App\Core\Audit;
 use App\Core\Auth;
 use App\Core\Database;
 use App\Core\Flash;
+use App\Helpers\DashboardData;
 use App\Models\User;
 use App\Services\LoginThrottle;
 use Throwable;
@@ -104,6 +105,49 @@ final class AuthController extends Controller
             'username' => $username,
             'error' => $error,
             'notice' => $notice,
+            'linkSections' => $this->publicLinks(),
         ], 'auth');
+    }
+
+    /**
+     * The link sections of the dashboard (Monitoring & Laporan, Sistem), shown read only under the login form.
+     * Only link cards that are not hidden; forms need a session. [] when the database cannot be read,
+     * so the login form still shows.
+     *
+     * @return list<array{id: mixed, title: string, icon: string, cards: list<array<string, mixed>>}>
+     */
+    private function publicLinks(): array
+    {
+        try {
+            $data = DashboardData::load();
+        } catch (Throwable $exception) {
+            error_log('Login links: ' . $exception->getMessage());
+            return [];
+        }
+        $sections = [];
+        foreach ($data['sections'] as $section) {
+            if (($section['kind'] ?? '') === 'links') {
+                $sections[$section['id']] = ['id' => $section['id'], 'title' => (string) $section['title'], 'icon' => (string) $section['icon'], 'cards' => []];
+            }
+        }
+        foreach ($data['cards'] as $card) {
+            if ($card['kind'] !== 'link' || !empty($card['hidden']) || !isset($sections[$card['section']])) {
+                continue;
+            }
+            $image = $card['image'] ?? null;
+            // An uploaded icon is a /berkas file, readable only when signed in: the card shows its icon instead.
+            if (!is_string($image) || $image === '' || str_contains($image, '/berkas/') || preg_match('#^https?://#i', $image) !== 1) {
+                $image = null;
+            }
+            $sections[$card['section']]['cards'][] = [
+                'title' => (string) $card['title'],
+                'description' => (string) ($card['description'] ?? ''),
+                'icon' => (string) $card['icon'],
+                'color' => (string) $card['color'],
+                'image' => $image,
+                'url' => is_string($card['url']) && preg_match('#^https?://#i', $card['url']) === 1 ? $card['url'] : null,
+            ];
+        }
+        return array_values(array_filter($sections, static fn (array $section): bool => $section['cards'] !== []));
     }
 }

@@ -38,14 +38,14 @@ final class AttentionTest extends TestCase
         self::assertSame('2026-11-03 03:00:00', AssetAttention::utc('2026-11-03T03:00:00.000Z'));
     }
 
-    public function testAWaitingServiceOpensItsServisFormInTheBell(): void
+    public function testAWaitingServiceOpensItsProgresServisPageInTheBell(): void
     {
         $item = Attention::serviceItem(['id' => 'SRV-2026-0001', 'deviceId' => 'ITEM-00049898', 'deviceName' => 'Stand Holder TV', 'type' => 'Perbaikan',
             'problem' => 'Patah bracket', 'technician' => 'IT botania', 'note' => 'Pesan bracket baru', 'since' => '2026-11-03T03:00:00.000Z', 'read' => false]);
         self::assertSame('service', $item['kind']);
         self::assertSame('Aset IT · Menunggu Suku Cadang', $item['form']);
         self::assertSame(['Stand Holder TV (ITEM-00049898) — Perbaikan: Patah bracket', 'Pesan bracket baru'], $item['reasons']);
-        self::assertStringEndsWith('/aset/servis?barcode=ITEM-00049898', $item['url']);
+        self::assertStringEndsWith('/aset/progres-servis?id=SRV-2026-0001', $item['url']);
         self::assertSame('2026-11-03 03:00:00', $item['sort']);
     }
 }

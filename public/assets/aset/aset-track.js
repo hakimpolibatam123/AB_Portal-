@@ -4,7 +4,7 @@
   'use strict';
   var AS = window.AS, AU = window.AU, GF = window.GF, esc = AU.esc, ic = AU.ic;
   var app = document.getElementById('as-app');
-  var DEV = null, finder = null, form = null;
+  var DEV = null, finder = null, form = null, kept = null;
   var RECENT_KEY = 'as.recentTracked';
   var TITLE = 'Penempatan & Lacak Perangkat';
 
@@ -32,6 +32,13 @@
     AU.render(app); GF.wire(form);
     form.addEventListener('click', function (e) { var b = e.target.closest('[data-pick]'); if (b) finder.set(AS.get(b.getAttribute('data-pick'))); });
     form.addEventListener('submit', function (e) { e.preventDefault(); if (DEV && AS.placed(DEV)) submitMove(); });
+    // An unsent move comes back after leaving the page (asked first), on its device. Opening another device is not
+    // interrupted.
+    kept = GF.draft(form, { key: 'lacak', title: 'Pindahkan / Perbarui Penempatan',
+      extra: function () { return DEV ? DEV.id : ''; },
+      allow: function (id) { var b = AU.qs('id') || AU.qs('barcode'); return !!AS.get(id) && AS.placed(AS.get(id)) && (!b || AS.normId(b) === id); },
+      label: function (dr) { var x = AS.get(dr.extra); return x ? 'Perangkat: ' + x.name + ' (' + x.id + ')' : ''; },
+      restore: function (id) { var x = AS.get(id); if (x && (!DEV || DEV.id !== id)) open(x, true); else { var s = form.querySelector('[data-sec="move"]'); if (s) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); } } });
     if (!AU.qs('id') && !AU.qs('barcode')) setTimeout(function () { finder.input.focus(); }, 60);
   }
 
@@ -54,7 +61,7 @@
       notice = '<div class="gf-card as-notice as-notice--muted">' + ic('archive') + '<div><b>Perangkat sudah dihapuskan (disposed)</b> pada ' + esc(AU.fmtDate(d.disposedAt)) + (r.method ? ' — ' + esc(r.method) : '') +
         '. Tidak lagi dilacak secara aktif; seluruh riwayat tetap tersimpan sebagai arsip.</div></div>';
     } else if (openDsp) notice = '<div class="gf-card as-notice as-notice--warn">' + ic('archive') + '<div><b>Ada pengajuan disposal lama yang belum selesai</b> (' + esc(openDsp.id) + '). <a class="gf-link" href="disposal?barcode=' + encodeURIComponent(d.id) + '">Selesaikan atau batalkan</a></div></div>';
-    else if (openSvc) notice = '<div class="gf-card as-notice as-notice--info">' + ic('wrench') + '<div><b>Sedang diservis</b> — ' + esc(openSvc.type) + ', ' + esc(AS.SVC_STATUS[openSvc.status].label) + ' · ' + esc(openSvc.technician) + (openSvc.dueDate ? ' ' + AU.dueBadge(openSvc) : '') + '. <button type="button" class="gf-link as-linkbtn" data-svc-status="' + esc(openSvc.id) + '">Ubah status servis</button></div></div>';
+    else if (openSvc) notice = '<div class="gf-card as-notice as-notice--info">' + ic('wrench') + '<div><b>Sedang diservis</b> — ' + esc(openSvc.type) + ', ' + esc(AS.SVC_STATUS[openSvc.status].label) + ' · ' + esc(openSvc.technician) + (openSvc.dueDate ? ' ' + AU.dueBadge(openSvc) : '') + '. <a class="gf-link" href="progres-servis?id=' + encodeURIComponent(openSvc.id) + '">Ubah status di Progres Servis</a></div></div>';
 
     var specRows = (c.spec || []).filter(function (s) { return d.spec && d.spec[s.key]; }).map(function (s) { return [s.label, s.type === 'date' ? AU.fmtDate(d.spec[s.key]) : d.spec[s.key]]; });
     return GF.section(1, 'Informasi Perangkat', '', null, ' data-sec="info"') +
@@ -62,11 +69,12 @@
       '<div class="as-devhead__meta">' + AU.code(d.id) + '<span>' + esc(AU.catName(d)) + '</span>' + AU.statusPill(d.status) + '</div></div></div>' +
       GF.kv([['Departemen', d.department], ['Merek / Model', [d.brand, d.model].filter(Boolean).join(' ')], ['Serial Number', d.serial], ['IP Address', d.ip], ['MAC Address', d.mac], ['Penanggung Jawab', d.pic]].concat(specRows)
         .concat([['Tanggal Pembelian', d.purchaseDate ? AU.fmtDate(d.purchaseDate) : ''], d.invoices && d.invoices.length ? ['Invoice Pembelian', AU.docsHtml(d.invoices), true] : null, ['Terdaftar', AU.fmtDateTime(d.createdAt) + ' · ' + d.createdBy], ['Catatan', d.notes]])) +
-      '<div class="as-done__links" style="margin-top:14px">' + (dead ? '' : '<a class="gf-link" href="registrasi?edit=' + encodeURIComponent(d.id) + '">' + ic('pencil') + 'Edit data</a>') +
+      '<div class="as-done__links" style="margin-top:14px">' + (dead ? '' : '<a class="gf-btn gf-btn--outline as-editbtn" href="registrasi?edit=' + encodeURIComponent(d.id) + '">' + ic('pencil') + 'Edit Data Perangkat</a>') +
       '</div></section>' +
       (dead ? '' : '<section class="gf-card"><h3 class="gf-q__title" style="margin-bottom:14px">Tindak Lanjut</h3>' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px">' +
-        '<a class="gf-btn gf-btn--primary" href="servis?barcode=' + encodeURIComponent(d.id) + '">' + ic('wrench') + (openSvc ? 'Perbarui Servis' : 'Servis Perangkat') + '</a>' +
+        (openSvc ? '<a class="gf-btn gf-btn--primary" href="progres-servis?id=' + encodeURIComponent(openSvc.id) + '">' + ic('activity') + 'Progres Servis</a>'
+          : '<a class="gf-btn gf-btn--primary" href="servis?barcode=' + encodeURIComponent(d.id) + '">' + ic('wrench') + 'Servis Perangkat</a>') +
         '<a class="gf-btn gf-btn--ghost" href="serah-terima?barcode=' + encodeURIComponent(d.id) + '">' + ic('file-text') + 'Serah Terima</a>' +
         '<a class="gf-btn gf-btn--ghost" href="disposal?barcode=' + encodeURIComponent(d.id) + '">' + ic('archive') + 'Disposal Perangkat</a>' +
         '</div></section>') +
@@ -81,7 +89,7 @@
           '<div class="as-tl__body">' + esc(m.reason) + (m.note ? ' — ' + esc(m.note) : '') + (m.picTo && m.picTo !== m.picFrom ? '<br>Penanggung jawab: ' + esc(m.picFrom || '—') + ' → ' + esc(m.picTo) : '') + '</div><div class="as-tl__by">Diperbarui oleh ' + esc(m.by) + '</div></li>';
       }).join('') + '</ol>' : '<p class="gf-q__help">Belum ada perpindahan. Perangkat masih di lokasi registrasi.</p>') + '</section>' +
       (svcs.length ? '<section class="gf-card"><div class="gf-q__head"><h3 class="gf-q__title">Riwayat Servis</h3><span class="gf-q__badge">' + svcs.length + ' laporan</span></div><ul class="as-list">' + svcs.slice(0, 4).map(function (t) {
-        return '<li><a class="as-list__item" href="servis?barcode=' + encodeURIComponent(d.id) + '"><span class="as-list__text"><b>' + esc(t.type) + ' · ' + esc(t.id) + '</b><small>' + esc(t.problem) + '</small></span><span class="as-list__meta">' + esc(AU.fmtDate(t.reportDate)) + '<br>' + AU.svcPill(t.status) + '</span></a></li>';
+        return '<li><a class="as-list__item" href="progres-servis?id=' + encodeURIComponent(t.id) + '"><span class="as-list__text"><b>' + esc(t.type) + ' · ' + esc(t.id) + '</b><small>' + esc(t.problem) + '</small></span><span class="as-list__meta">' + esc(AU.fmtDate(t.reportDate)) + '<br>' + AU.svcPill(t.status) + '</span></a></li>';
       }).join('') + '</ul></section>' : '');
   }
 
@@ -102,8 +110,6 @@
   function moveHtml(d) {
     return GF.section(2, 'Pindahkan / Perbarui Penempatan', '', null, ' data-sec="move" id="pindah"') +
       GF.q({ name: 'prev', title: 'Lokasi Sebelumnya', badge: 'Otomatis', body: GF.ro(esc(dep(d.location))) }) +
-      GF.q({ name: 'quick', title: 'Isi cepat lokasi baru', badge: 'Opsional', help: 'Perangkat tidak pindah, hanya ganti penanggung jawab? Pilih "Lokasi sama, ganti penanggung jawab".', body: '<div class="gf-chips" style="margin-top:0">' +
-        '<button type="button" class="gf-chip" data-quick="gudang">Gudang IT</button><button type="button" class="gf-chip" data-quick="workshop">Instalasi IT (Workshop)</button><button type="button" class="gf-chip" data-quick="pic">Lokasi sama, ganti penanggung jawab</button></div>' }) +
       GF.locQs('to_', null) +
       GF.q({ name: 'at', title: 'Tanggal & Waktu Perpindahan', req: true, body: GF.text('at', { type: 'datetime-local', value: AU.nowLocal(), max: AU.nowLocal() }) }) +
       GF.q({ name: 'by', title: 'Diperbarui Oleh', req: true, body: GF.text('by', { value: AS.me(), list: 'dl-techs' }) + GF.datalist('dl-techs', AS.TECHNICIANS) }) +
@@ -119,21 +125,8 @@
     box.innerHTML = infoHtml(d) + (d.status === 'disposed' || (!AS.placed(d) && !confirmHtml) ? '<div class="gf-actions"><a class="gf-btn gf-btn--ghost" href="../aset">' + ic('arrow-left') + 'Kembali ke Menu Aset IT</a></div>'
       : confirmHtml || moveHtml(d));
     AU.render(box);
-    var sv = box.querySelector('[data-svc-status]');
-    if (sv) sv.addEventListener('click', function () {
-      var tk = AS.openService(d.id);
-      if (tk) AU.serviceStatus(tk, function () { DEV = AS.get(d.id); drawResult(); });
-    });
     var rs = box.querySelector('[data-reset]');
-    if (rs) rs.addEventListener('click', function () { drawResult(); box.querySelector('[data-sec="move"]').scrollIntoView({ block: 'start' }); });
-    box.querySelectorAll('[data-quick]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var k = b.getAttribute('data-quick'), set = function (n, v) { var el = form.querySelector('[name="' + n + '"]'); if (el) { el.value = v; GF.err(form, n, ''); } };
-        if (k === 'gudang') { set('to_dept', 'Gudang IT'); var r = form.querySelector('[name="reason"][value="Dikembalikan ke gudang"]'); if (r) r.checked = true; GF.err(form, 'reason', ''); }
-        if (k === 'workshop') { set('to_dept', 'Instalasi IT'); var r2 = form.querySelector('[name="reason"][value="Dibawa untuk perbaikan"]'); if (r2) r2.checked = true; GF.err(form, 'reason', ''); }
-        if (k === 'pic') { set('to_dept', d.location.dept); form.querySelector('[name="pic"]').focus(); }
-      });
-    });
+    if (rs) rs.addEventListener('click', function () { kept.clear(); drawResult(); box.querySelector('[data-sec="move"]').scrollIntoView({ block: 'start' }); });
     box.querySelectorAll('[data-again]').forEach(function (b) { b.addEventListener('click', function () { drawResult(); form.querySelector('[data-sec="move"]').scrollIntoView({ behavior: 'smooth', block: 'start' }); }); });
     box.querySelectorAll('[data-other]').forEach(function (b) { b.addEventListener('click', function () { DEV = null; history.replaceState(null, '', 'lacak'); shell(); }); });
   }
@@ -148,6 +141,7 @@
 
   function saved(d, toast, card) {
     AS.save().then(function () {
+      kept.clear(); // saved: nothing left to continue
       DEV = AS.get(d.id) || d;
       AU.toast(toast[0], toast[1], 'success');
       drawResult(card);

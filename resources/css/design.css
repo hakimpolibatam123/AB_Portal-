@@ -2,6 +2,7 @@
 @import "./design-chrome.css";
 @import "./module-ui.css";
 @import "./gform.css";
+@import "./login-portal.css";
 @source "../../app/**/*.php";
 @source "../../config/**/*.php";
 @source "../../public/assets/js/*.js";

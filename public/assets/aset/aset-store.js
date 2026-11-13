@@ -490,8 +490,11 @@
       return [d.id, d.name, d.department, kindOf(d), d.serial, d.ip, d.mac, d.brand, d.model, d.location && d.location.room, d.location && d.location.dept].join(' ').toLowerCase().indexOf(q) !== -1;
     });
   }
+  /* Another device already using this IP, MAC or serial. An IP or MAC without any digit ("DHCP", "-") is a note,
+     not an address, so devices may share it (mirrors AssetLedger::checkNetwork). */
   function conflicts(field, value, exceptId) {
     var v = String(value || '').trim().toUpperCase(); if (!v) return null;
+    if (field !== 'serial' && !/\d/.test(v)) return null;
     if (field === 'mac') v = normMac(v);
     return devices().filter(function (d) { return d.id !== exceptId && String(d[field] || '').toUpperCase() === v; })[0] || null;
   }

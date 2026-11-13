@@ -89,7 +89,7 @@ final class Attention
             'sort' => $utc,
             'read' => $w['read'],
             'reasons' => array_values(array_filter([$w['deviceName'] . ' (' . $w['deviceId'] . ') — ' . $w['type'] . ': ' . $w['problem'], $w['note']])),
-            'url' => url('/aset/servis') . '?' . http_build_query(['barcode' => $w['deviceId']]),
+            'url' => url('/aset/progres-servis') . '?' . http_build_query(['id' => $w['id']]),
             'device' => $w['deviceName'], 'technician' => $w['technician'],
         ];
     }

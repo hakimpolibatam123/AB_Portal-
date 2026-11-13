@@ -67,6 +67,8 @@
         <?= $navItem('/', 'layout-dashboard', 'Portal Monitoring Terpadu') ?>
         <?php $onAset = $navPath === '/aset' || str_starts_with($navPath, '/aset/'); // Aset IT: one link to its menu page, marked on every Aset page. ?>
         <a class="side-menu__link<?= $onAset ? ' is-current' : '' ?>" href="<?= e(url('/aset')) ?>"<?= $navPath === '/aset' ? ' aria-current="page"' : '' ?>><?= card_icon('hard-drive', 'size-4') ?><span>Aset IT</span></a>
+        <?php $onClearance = $navPath === '/clearance' || str_starts_with($navPath, '/clearance/'); // Form Clearance: marked on its list and form. ?>
+        <a class="side-menu__link<?= $onClearance ? ' is-current' : '' ?>" href="<?= e(url('/clearance')) ?>"<?= $navPath === '/clearance' ? ' aria-current="page"' : '' ?>><?= card_icon('user-check', 'size-4') ?><span>Form Clearance</span></a>
         <?= $navItem('/perlu-perhatian', 'triangle-alert', 'Perlu perhatian') ?>
         <?= $navItem('/riwayat-aktivitas', 'history', 'Riwayat aktivitas') ?>
         <?= $navItem('/pengaturan-email', 'mail', 'Pengaturan Email') ?>

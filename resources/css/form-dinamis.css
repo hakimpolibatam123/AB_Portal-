@@ -15,12 +15,16 @@
    sits beside the narrow form (the clip would hide the button there). */
 .portal-page .breadcrumb-shell.is-sticky:not(:has(.breadcrumb-fill, .breadcrumb-editor)) { box-shadow: 0 0 0 100vmax #f8fafc; clip-path: inset(0 -100vmax); }
 @media (max-width: 639px) { .portal-page .breadcrumb-shell.is-sticky { padding-block: 8px; } }
+/* There the row is only the button: its empty, page-wide rest must not catch clicks meant for what scrolls under
+   it (the editor's "Tambah Pertanyaan", the top of a form card). */
 @media (min-width: 1400px) {
-  .portal-page .breadcrumb-shell:has(.breadcrumb-fill) { height: 0; padding-block: 0; background: none; }
+  .portal-page .breadcrumb-shell:has(.breadcrumb-fill) { height: 0; padding-block: 0; background: none; pointer-events: none; }
   .portal-page .breadcrumb-fill { padding-top: 24px; } /* = top padding of .gf-page */
+  .portal-page .breadcrumb-fill :is(a, button) { pointer-events: auto; }
 }
 @media (min-width: 1620px) {
-  .portal-page .breadcrumb-shell:has(.breadcrumb-editor) { height: 0; padding-block: 0; background: none; }
+  .portal-page .breadcrumb-shell:has(.breadcrumb-editor) { height: 0; padding-block: 0; background: none; pointer-events: none; }
+  .portal-page .breadcrumb-editor :is(a, button) { pointer-events: auto; }
   .portal-page .breadcrumb-editor { padding-top: 24px; }
   .portal-page .breadcrumb-shell:has(.breadcrumb-editor) ~ .fe-page { padding-top: 24px; }
 }

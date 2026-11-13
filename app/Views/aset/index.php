@@ -8,13 +8,14 @@ $cards = [
     'Formulir Aset' => [
         ['registrasi', 'Registrasi Perangkat', 'Daftarkan perangkat baru: pindai barcode, isi data dan spesifikasi, cetak label.', 'circle-plus', 'teal', 'rekap#perangkat'],
         ['lacak', 'Penempatan & Lacak Perangkat', 'Tentukan atau pindahkan lokasi dan penanggung jawab, lihat riwayat perpindahan dan servis.', 'map-pin', 'sky', 'rekap-perpindahan'],
-        ['servis', 'Servis & Pemeliharaan', 'Laporkan kerusakan atau pemeliharaan, perbarui progres hingga selesai.', 'wrench', 'amber', 'rekap-servis'],
+        ['servis', 'Servis & Pemeliharaan', 'Laporkan perangkat yang rusak atau perlu pemeliharaan.', 'wrench', 'amber', 'rekap-servis'],
         ['serah-terima', 'Serah Terima Perangkat', 'Buat berita acara serah terima dengan tanda tangan, lalu ekspor sebagai PDF.', 'clipboard-check', 'cyan', 'rekap-serah-terima'],
         ['disposal', 'Disposal Perangkat', 'Hapuskan perangkat langsung setelah konfirmasi. Riwayat tetap diarsipkan.', 'archive', 'rose', 'rekap-disposal'],
     ],
     'Rekap & Laporan' => [
+        // Riwayat Servis has no card of its own: it opens from "Lihat Rekap" of Servis & Pemeliharaan.
         ['rekap', 'Rekap & Daftar Perangkat', 'Ringkasan aset, daftar semua perangkat dengan filter dan ekspor CSV, serta riwayatnya.', 'chart-column', 'purple', null],
-        ['rekap-servis', 'Riwayat Servis', 'Semua laporan servis dan pemeliharaan dari formulir Servis.', 'history', 'orange', null],
+        ['progres-servis', 'Progres Servis', 'Cek progres servis yang berjalan, ubah statusnya, dan lihat riwayatnya.', 'activity', 'orange', null],
     ],
 ];
 ?>

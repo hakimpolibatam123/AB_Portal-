@@ -308,6 +308,9 @@ main .rsab-action .rs-ic { font-size: 16px !important; }
 .gf-btn--text:hover { background: var(--rs-teal-50); }
 .gf-btn--outline { background: #fff; color: var(--rs-teal-700); border-color: #A9C9C1; }
 .gf-btn--outline:hover { background: var(--rs-teal-50); }
+/* "Edit Data Perangkat" on the device page: tinted so it stands out from the details above it */
+.gf-btn.as-editbtn { background: var(--rs-teal-50); border-color: var(--rs-teal-600); color: var(--rs-teal-700); font-weight: 600; }
+.gf-btn.as-editbtn:hover { background: var(--rs-teal-600); color: #fff; }
 @media (max-width: 600px) { .gf-actions__spacer { display: none; } .gf-actions .gf-btn--primary { flex: 1 1 100%; order: -1; } }
 
 /* side panels moved under the form */

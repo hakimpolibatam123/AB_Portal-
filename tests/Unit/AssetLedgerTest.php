@@ -65,6 +65,18 @@ final class AssetLedgerTest extends TestCase
         $this->expectRule('Pilih kategori', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000005', 'category' => 'toaster'])));
     }
 
+    public function testDhcpAndOtherNotesWithoutDigitsMayBeSharedButAddressesMayNot(): void
+    {
+        $ledger = $this->ledger();
+        $ledger->register($this->pc(['id' => 'ITEM-00000011', 'ip' => 'DHCP', 'mac' => '-', 'serial' => 'SN11']));
+        $second = $ledger->register($this->pc(['id' => 'ITEM-00000012', 'ip' => 'dhcp', 'mac' => '-', 'serial' => 'SN12']));
+        self::assertSame('dhcp', $second['ip']);
+        $ledger->update('ITEM-00000012', ['ip' => ' DHCP ']);
+        $ledger->register($this->pc(['id' => 'ITEM-00000013', 'ip' => '10.20.1.50', 'mac' => '', 'serial' => 'SN13']));
+        $this->expectRule('IP sudah dipakai', fn () => $ledger->register($this->pc(['id' => 'ITEM-00000014', 'ip' => '10.20.1.50', 'mac' => '', 'serial' => 'SN14'])));
+        $this->expectRule('IP sudah dipakai', fn () => $ledger->update('ITEM-00000011', ['ip' => '10.20.1.50']));
+    }
+
     public function testDepartmentIsAskedAtRegistrationAndKeptOnEdit(): void
     {
         $ledger = $this->ledger();

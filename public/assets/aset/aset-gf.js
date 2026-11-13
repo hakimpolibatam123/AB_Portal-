@@ -136,8 +136,109 @@
     };
     root.addEventListener('input', h); root.addEventListener('change', h);
   }
+  /*
+   * Unsent answers are kept in this browser while a form is filled, so leaving the page (or the login ending) loses
+   * nothing: on the next visit the person is asked whether to use them again — never filled in silently. Only answers
+   * that differ from what the form first showed are kept; uploaded files cannot be. Kept per page and per user for
+   * DRAFT_DAYS days, and removed once the form is sent (done) or emptied.
+   * o: { key, title, extra(): string kept beside the answers (e.g. the chosen device), allow(extra): ask at all?,
+   *      restore(extra): runs before the answers are put back (e.g. picks the device), label(draft): one line shown,
+   *      extraCounts: the extra alone is worth keeping (e.g. a list of devices built up without typing) }
+   * The page calls touch() after a change that is not typed into a field (a device added to a list, a quick-fill chip).
+   */
+  var DRAFT_DAYS = 7, activeDraft = null;
+  function readForm(form) {
+    var v = {};
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.disabled || /^(file|submit|button|reset|password|hidden)$/.test(el.type)) return;
+      if (el.type === 'radio') { if (el.checked) v[el.name] = el.value; else if (!(el.name in v)) v[el.name] = ''; return; }
+      if (el.type === 'checkbox') { var list = (v[el.name] || '').split('\n').filter(Boolean); if (el.checked) list.push(el.value); v[el.name] = list.join('\n'); return; }
+      v[el.name] = el.value;
+    });
+    return v;
+  }
+  function fire(el) { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); }
+  /* Puts one kept answer back; false while its question is not on the form yet (it appears after an earlier answer). */
+  function setField(form, name, value) {
+    var els = Array.prototype.slice.call(form.querySelectorAll('[name="' + name + '"]'));
+    if (!els.length) return false;
+    if (els[0].type === 'radio') {
+      var r = els.filter(function (x) { return x.value === value; })[0];
+      if (!r) return value === '';
+      if (!r.checked) { r.checked = true; fire(r); }
+      return true;
+    }
+    if (els[0].type === 'checkbox') {
+      var want = value.split('\n');
+      els.forEach(function (c) { var on = want.indexOf(c.value) !== -1; if (c.checked !== on) { c.checked = on; fire(c); } });
+      return true;
+    }
+    if (els[0].value !== value) { els[0].value = value; fire(els[0]); }
+    return true;
+  }
+  function draft(form, o) {
+    var key = 'as.draft:' + (window.AS ? window.AS.me() : '') + ':' + o.key;
+    var base = {}, timer = null, quiet = false, dead = false;
+    // What each question showed when it first appeared; only answers that differ from it are kept.
+    var note = function () { var cur = readForm(form); Object.keys(cur).forEach(function (n) { if (!(n in base)) base[n] = cur[n]; }); return cur; };
+    function save() {
+      clearTimeout(timer); timer = null;
+      if (quiet || dead) return;
+      var cur = note(), changed = {}, extra = o.extra ? o.extra() : '';
+      Object.keys(cur).forEach(function (n) { if (cur[n] !== base[n]) changed[n] = cur[n]; });
+      try {
+        if (!Object.keys(changed).length && !(o.extraCounts && extra)) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify({ at: Date.now(), extra: extra, values: changed }));
+      } catch (e) { /* private mode or full storage: the form still works, only nothing is kept */ }
+    }
+    function load() {
+      try {
+        var d = JSON.parse(localStorage.getItem(key) || 'null');
+        if (d && d.values && (Object.keys(d.values).length || (o.extraCounts && d.extra)) && Date.now() - d.at < DRAFT_DAYS * 864e5) return d;
+        localStorage.removeItem(key);
+      } catch (e) {}
+      return null;
+    }
+    // The answers were sent or emptied: forget them. The form may stay and be filled again (kept from then on).
+    function remove() { clearTimeout(timer); timer = null; try { localStorage.removeItem(key); } catch (e) {} }
+    function apply(d) {
+      quiet = true;
+      Promise.resolve(o.restore ? o.restore(d.extra) : null).then(function () {
+        var left = Object.keys(d.values), pass = 0;
+        (function step() {
+          note(); // questions that just appeared start from what they show, before the kept answer goes in
+          left = left.filter(function (n) { return !setField(form, n, d.values[n]); });
+          if (left.length && ++pass < 6) { setTimeout(step, 120); return; }
+          setTimeout(function () { quiet = false; save(); window.AU.toast('Isian dipulihkan', 'Periksa kembali sebelum dikirim. Berkas dan tanda tangan perlu diunggah ulang.', 'success'); }, 150);
+        })();
+      });
+    }
+    function ask(d) {
+      var label = o.label ? o.label(d) : '';
+      var m = window.AU.modal({ title: 'Lanjutkan isian sebelumnya?', size: 'sm',
+        body: '<p class="pm-text" style="margin-top:0">Ada isian <b>' + esc(o.title) + '</b> yang belum dikirim, terakhir diubah ' + esc(window.AU.fmtDateTime(new Date(d.at).toISOString())) + '.</p>' +
+          (label ? '<p class="pm-text">' + esc(label) + '</p>' : '') + '<p class="pm-help">Pakai data tadi untuk melanjutkan, atau mulai dari formulir kosong.</p>',
+        foot: '<button type="button" class="rs-btn rs-btn--ghost" data-new>Mulai Baru</button><button type="submit" class="rs-btn rs-btn--primary">' + ic('history') + 'Pakai Data Tadi</button>',
+        onSubmit: function (api2) { api2.close(); apply(d); } });
+      m.$('[data-new]').addEventListener('click', function () { try { localStorage.removeItem(key); } catch (e) {} m.close(); });
+    }
+    // stop: the form was drawn again (the kept answers stay); clear: sent or emptied (they are removed).
+    var later = function () { if (quiet || dead) return; clearTimeout(timer); timer = setTimeout(save, 300); };
+    var api = { clear: remove, touch: later, stop: function () { dead = true; clearTimeout(timer); timer = null; } };
+    if (activeDraft) activeDraft.stop();
+    activeDraft = api;
+    note();
+    new MutationObserver(function () { if (!quiet && !dead) note(); }).observe(form, { childList: true, subtree: true });
+    form.addEventListener('input', later); form.addEventListener('change', later);
+    window.addEventListener('pagehide', function () { if (timer) save(); });
+    var kept = load();
+    if (kept && (!o.allow || o.allow(kept.extra))) setTimeout(function () { ask(kept); }, 0);
+    return api;
+  }
+
   /* Google Forms-style confirmation that replaces the form */
   function done(root, o) {
+    if (activeDraft) { activeDraft.clear(); activeDraft.stop(); } // sent: nothing left to continue
     root.innerHTML = '<div class="gf"><div class="gf-card gf-head as-done"><span class="as-done__icon">' + ic('circle-check') + '</span><h1>' + esc(o.title) + '</h1>' +
       '<p class="gf-head__desc">' + esc(o.text) + '</p>' + (o.html || '') +
       '<div class="as-done__links">' + (o.links || []).map(function (l) {
@@ -165,5 +266,5 @@
 
   window.GF = { head: head, section: section, q: q, text: text, area: area, select: select, radio: radio, ro: ro, actions: actions,
     val: val, err: err, clear: clear, need: need, firstErr: firstErr, show: show, wire: wire, done: done, kv: kv, datalist: datalist,
-    locQs: locQs, readLoc: readLoc };
+    locQs: locQs, readLoc: readLoc, draft: draft };
 })();
