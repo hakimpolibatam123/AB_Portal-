@@ -8,7 +8,8 @@ use Mpdf\Mpdf;
 
 /**
  * The export of Form Clearance: a recap of every employee recorded (A4 landscape), one row each with the
- * employee's data, the status of each access Unit IT checks, the notes, and who signed for Ka. Unit IT.
+ * employee's data, the status of each access Unit IT checks, the notes, and the signatures of the employee and of
+ * Ka. Unit IT.
  * Header, table head and footer repeat on every page.
  */
 final class ClearancePdf
@@ -56,7 +57,7 @@ final class ClearancePdf
             .head td { vertical-align: middle; } .org { font-size: 8pt; color: #4b5563; } .title { font-size: 13pt; font-weight: bold; color: #0b3a6f; }
             .meta { font-size: 7.5pt; color: #4b5563; } .rule { border-bottom: 0.4mm solid #0b3a6f; }
             .stats { width: 100%; border-collapse: separate; border-spacing: 2mm 0; margin: 0 -2mm 3mm -2mm; }
-            .stats td { border: 0.2mm solid #cbd5e1; padding: 1.6mm 3mm; width: 25%; }
+            .stats td { border: 0.2mm solid #cbd5e1; padding: 1.6mm 3mm; width: 20%; }
             .stat-label { font-size: 7.5pt; color: #4b5563; } .stat-value { font-size: 12pt; font-weight: bold; }
             table.data { width: 100%; border-collapse: collapse; }
             table.data th { background-color: #e8eef7; font-weight: bold; padding: 1.2mm 1mm; border: 0.2mm solid #94a3b8; font-size: 7pt; vertical-align: middle; }
@@ -73,24 +74,27 @@ final class ClearancePdf
     {
         usort($records, static fn (array $a, array $b): int => strcmp((string) $a['id'], (string) $b['id']));
         $signed = 0;
+        $empSigned = 0;
         $issues = 0;
         foreach ($records as $r) {
             $p = Clearance::progress($r);
             $signed += $p['signed'] ? 1 : 0;
+            $empSigned += ($r['employeeSign'] ?? null) !== null ? 1 : 0;
             $issues += $p['issue'] ? 1 : 0;
         }
         $html = '<table class="stats"><tr>'
-            . self::stat('Karyawan didata', (string) count($records)) . self::stat('Sudah TTD Ka. Unit IT', (string) $signed)
-            . self::stat('Belum TTD Ka. Unit IT', (string) (count($records) - $signed)) . self::stat('Ada akses bermasalah', (string) $issues)
+            . self::stat('Karyawan didata', (string) count($records)) . self::stat('Sudah TTD Karyawan', (string) $empSigned)
+            . self::stat('Sudah TTD Ka. Unit IT', (string) $signed) . self::stat('Belum TTD Ka. Unit IT', (string) (count($records) - $signed))
+            . self::stat('Ada akses bermasalah', (string) $issues)
             . '</tr></table>';
         if ($records === []) {
             return $html . '<div class="empty">Belum ada karyawan yang didata.</div>';
         }
-        $head = '<tr><th width="6mm">No</th><th width="38mm">Nama / NIK</th><th width="30mm">Bagian / Jabatan</th><th width="20mm">Tgl. Pengunduran Diri</th>';
+        $head = '<tr><th width="6mm">No</th><th width="33mm">Nama / NIK</th><th width="25mm">Bagian / Jabatan</th><th width="18mm">Tgl. Pengunduran Diri</th>';
         foreach (Clearance::IT_ACCESS as $key => $_label) {
-            $head .= '<th class="acc" width="12.5mm">' . e(self::SHORT[$key]) . '</th>';
+            $head .= '<th class="acc" width="12mm">' . e(self::SHORT[$key]) . '</th>';
         }
-        $head .= '<th>Keterangan</th><th width="30mm">TTD Ka. Unit IT</th></tr>';
+        $head .= '<th>Keterangan</th><th width="28mm">TTD Karyawan</th><th width="28mm">TTD Ka. Unit IT</th></tr>';
         $rows = '';
         foreach ($records as $i => $r) {
             $it = $r['it'] ?? [];
@@ -110,6 +114,7 @@ final class ClearancePdf
                 . '<td>' . e(($r['position'] ?? '') !== '' ? (string) $r['position'] : '—') . '</td>'
                 . '<td>' . e(($r['resignDate'] ?? '') !== '' ? Format::date((string) $r['resignDate']) : '—') . '</td>'
                 . $cells . '<td>' . ($notes !== [] ? implode('<br>', $notes) : '<span class="sub">—</span>') . '</td>'
+                . '<td>' . self::signature($r['employeeSign'] ?? null, $signaturePath) . '</td>'
                 . '<td>' . self::signature($it['sign'] ?? null, $signaturePath) . '</td></tr>';
         }
         return $html . '<table class="data" repeat_header="1"><thead>' . $head . '</thead><tbody>' . $rows . '</tbody></table>'
@@ -121,7 +126,7 @@ final class ClearancePdf
         return '<td><div class="stat-label">' . e($label) . '</div><div class="stat-value">' . e($value) . '</div></td>';
     }
 
-    /** The Ka. Unit IT signature: a small picture (fitted inside 26 x 9 mm), the name, the date signed. */
+    /** A signature (employee or Ka. Unit IT): a small picture (fitted inside 24 x 9 mm), the name, the date signed. */
     private static function signature(?array $sign, callable $signaturePath): string
     {
         if ($sign === null) {
@@ -132,7 +137,7 @@ final class ClearancePdf
         if ($path !== null) {
             $size = @getimagesize($path);
             $ratio = is_array($size) && $size[1] > 0 ? $size[0] / $size[1] : 2.5;
-            $width = min(26.0, 9.0 * $ratio);
+            $width = min(24.0, 9.0 * $ratio);
             $html .= '<img src="' . e($path) . '" width="' . round($width, 1) . 'mm" height="' . round($width / $ratio, 1) . 'mm"><br>';
         }
         $name = trim((string) ($sign['name'] ?? ''));

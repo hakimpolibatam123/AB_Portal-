@@ -35,7 +35,7 @@ final class ClearanceController extends Controller
             'id' => $r['id'], 'name' => $r['name'], 'nik' => $r['nik'] ?? '', 'position' => $r['position'] ?? '', 'resignDate' => $r['resignDate'] ?? '',
             'updatedAt' => $r['updatedAt'], 'updatedBy' => $r['updatedBy'] ?? '', 'progress' => Clearance::progress($r),
             // For the "lihat" window of the list: the Unit IT part and who made it.
-            'it' => $r['it'] ?? [], 'createdAt' => $r['createdAt'] ?? '', 'createdBy' => $r['createdBy'] ?? '',
+            'it' => $r['it'] ?? [], 'employeeSign' => $r['employeeSign'] ?? null, 'createdAt' => $r['createdAt'] ?? '', 'createdBy' => $r['createdBy'] ?? '',
         ], (new ClearanceRepository(Database::connection()))->all());
         $this->page('Form Clearance', ['mode' => 'list', 'list' => $list]);
     }
@@ -189,12 +189,18 @@ final class ClearanceController extends Controller
         echo $body;
     }
 
-    /** The signature file of Ka. Unit IT the record refers to, when it is a clearance signature: id => original name. */
+    /** The signature files the record refers to (Ka. Unit IT, employee), when they are clearance signatures: id => original name. */
     private function signatureFiles(array $in): array
     {
-        $id = (int) ($in['it']['sign']['file']['id'] ?? 0);
-        $found = $id > 0 ? (new Attachment(Database::connection()))->find($id) : null;
-        return $found !== null && $found['owner_type'] === self::FILE_OWNER && $found['field'] === 'ttd' ? [$id => (string) $found['original_name']] : [];
+        $files = new Attachment(Database::connection());
+        $out = [];
+        foreach ([(int) ($in['it']['sign']['file']['id'] ?? 0), (int) ($in['employeeSign']['file']['id'] ?? 0)] as $id) {
+            $found = $id > 0 ? $files->find($id) : null;
+            if ($found !== null && $found['owner_type'] === self::FILE_OWNER && $found['field'] === 'ttd') {
+                $out[$id] = (string) $found['original_name'];
+            }
+        }
+        return $out;
     }
 
     private function page(string $title, array $data): void

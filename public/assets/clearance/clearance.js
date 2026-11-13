@@ -104,9 +104,14 @@
     donePopup(fresh);
   }
 
-  /* The "lihat" window of one clearance: the employee, each access Unit IT checked with its note, the signature of
-     Ka. Unit IT and who made / changed it. Edit opens the form; Hapus asks first (remove). */
+  /* The "lihat" window of one clearance: the employee, each access Unit IT checked with its note, the signatures of
+     the employee and Ka. Unit IT, and who made / changed it. Edit opens the form; Hapus asks first (remove). */
   var ACC_VIEW = { ok: { tone: 'ok', label: 'Tidak ada masalah' }, issue: { tone: 'err', label: 'Bermasalah' }, '': { tone: 'muted', label: 'Belum diperiksa' } };
+  function viewSig(role, s, fallbackName) {
+    return '<div class="cl-view__sig"><small class="cl-view__role">' + esc(role) + '</small>' + (s && s.file
+      ? '<img src="' + esc(BASE + '/berkas/' + s.file.id) + '" alt="Tanda tangan ' + esc(role) + '"><b>' + esc(s.name || fallbackName || '—') + '</b>' + (s.at ? '<small>Ditandatangani ' + esc(AU.fmtDateTime(s.at)) + '</small>' : '')
+      : '<p class="cl-view__none">Belum ditandatangani.</p>') + '</div>';
+  }
   function view(r, remove) {
     var it = r.it || {}, acc = it.access || {}, notes = it.notes || {}, sign = it.sign || null;
     var m = AU.modal({ title: r.name, subtitle: esc(r.id), size: 'md',
@@ -116,9 +121,7 @@
           var s = ACC_VIEW[acc[a.key] || ''] || ACC_VIEW[''];
           return '<li><span>' + esc(a.label) + (notes[a.key] ? '<small>' + esc(notes[a.key]) + '</small>' : '') + '</span>' + AU.pill(s) + '</li>';
         }).join('') + '</ul>' +
-        '<h3 class="as-sec-title">Tanda Tangan Ka. Unit IT</h3>' + (sign && sign.file
-          ? '<div class="cl-view__sig"><img src="' + esc(BASE + '/berkas/' + sign.file.id) + '" alt="Tanda tangan Ka. Unit IT"><b>' + esc(sign.name || '—') + '</b>' + (sign.at ? '<small>Ditandatangani ' + esc(AU.fmtDateTime(sign.at)) + '</small>' : '') + '</div>'
-          : '<p class="cl-view__none">Belum ditandatangani.</p>') +
+        '<h3 class="as-sec-title">Tanda Tangan</h3><div class="cl-view__sigs">' + viewSig('Ka. Unit IT', sign, '') + viewSig('Karyawan yang mengundurkan diri', r.employeeSign, r.name) + '</div>' +
         '<p class="cl-view__meta">Dibuat ' + esc(AU.fmtDateTime(r.createdAt) + (r.createdBy ? ' · ' + r.createdBy : '')) + '<br>Diperbarui ' + esc(AU.fmtDateTime(r.updatedAt) + (r.updatedBy ? ' · ' + r.updatedBy : '')) + '</p></div>',
       note: '<button type="button" class="rs-btn rs-btn--danger" data-del-in>' + ic('trash-2') + 'Hapus</button>',
       foot: '<button type="button" class="rs-btn rs-btn--ghost" data-x>Tutup</button><a class="rs-btn rs-btn--primary" href="' + API + '/isi?id=' + enc(r.id) + '">' + ic('pencil') + 'Edit</a>' });
@@ -141,11 +144,12 @@
   /* ---------------- form ---------------- */
 
   function drawForm(rec) {
-    var r = rec || {}, it = r.it || { access: {}, notes: {}, sign: null }, SIGN = it.sign || null, kept = null;
+    // SIGN: Ka. Unit IT; EMP: the resigning employee (named after the employee, not remembered).
+    var r = rec || {}, it = r.it || { access: {}, notes: {}, sign: null }, SIGN = it.sign || null, EMP = r.employeeSign || null, kept = null;
     // "Ingat TTD & nama": the remembered signature and name fill every form not signed yet (this browser, this user).
     var memo = memoGet(), signer = SIGN && SIGN.name ? SIGN.name : '';
     if (!SIGN && memo) { if (memo.file) SIGN = { file: memo.file }; signer = memo.name || ''; }
-    var plain = function () { return JSON.stringify(SIGN, function (k, v) { return k === 'url' ? undefined : v; }); }, SIGN0 = plain();
+    var plain = function () { return JSON.stringify({ it: SIGN, emp: EMP }, function (k, v) { return k === 'url' ? undefined : v; }); }, SIGN0 = plain();
 
     var head = '<header class="gf-card gf-head"><h1>Formulir Clearance</h1><dl class="gf-meta"><div><dt>No.</dt><dd>' + esc(rec ? rec.id : 'Baru') + '</dd></div>' +
       (rec ? '<div><dt>Unit IT</dt><dd>' + esc(progress(rec).label) + '</dd></div><div><dt>Diperbarui</dt><dd>' + esc(AU.fmtDateTime(rec.updatedAt) + ' · ' + rec.updatedBy) + '</dd></div>' : '') + '</dl>' +
@@ -160,19 +164,26 @@
       GF.q({ name: 'resignDate', title: 'Tanggal Pengunduran Diri', badge: 'Opsional', help: 'Tampil di rekap ekspor PDF / Excel.', body: GF.text('resignDate', { type: 'date', value: r.resignDate }) }) +
       GF.section(2, 'Unit IT', '') +
       GF.q({ name: 'access', title: 'Akses Karyawan', badge: 'Opsional', help: 'Berdasarkan data yang ada pada kami sampai dengan form ini diajukan, kami menyatakan bahwa pemohon:', body: accessTable() }) +
-      GF.q({ name: 'it_sign', title: 'Tanda Tangan Ka. Unit IT', badge: 'Opsional', help: 'Diketik, digambar, atau diunggah dari foto. Bisa diganti kapan saja.',
-        body: '<div class="cl-sigs cl-sigs--one"><div class="cl-sig" data-sig><div class="cl-sig__role">(Ka. Unit IT)</div><div class="cl-sig__box" data-sigbox></div>' +
+      GF.q({ name: 'it_sign', title: 'Tanda Tangan', badge: 'Opsional', help: 'Karyawan yang mengundurkan diri dan Ka. Unit IT. Diketik, digambar, atau diunggah dari foto. Bisa diganti kapan saja.',
+        body: '<div class="cl-sigs cl-sigs--pair"><div class="cl-sig" data-sig="emp"><div class="cl-sig__role">(Karyawan yang mengundurkan diri)</div><div class="cl-sig__box" data-sigbox></div>' +
+          '<p class="cl-sig__name cl-sig__name--auto" data-empname></p><p class="cl-sig__hint">Nama mengikuti isian Nama di atas.</p></div>' +
+          '<div class="cl-sig" data-sig="it"><div class="cl-sig__role">(Ka. Unit IT)</div><div class="cl-sig__box" data-sigbox></div>' +
           '<input class="gf-input cl-sig__name" name="it_signer" maxlength="100" placeholder="Nama Ka. Unit IT" aria-label="Nama Ka. Unit IT" value="' + esc(signer) + '">' +
           '<label class="cl-sig__remember"><input type="checkbox" data-remember' + (memo ? ' checked' : '') + '><span>Ingat TTD &amp; nama</span></label>' +
           '<p class="cl-sig__hint" data-remember-hint></p></div></div>' }) +
       '<div class="gf-actions"><a class="gf-btn gf-btn--ghost" href="' + API + '">' + ic('arrow-left') + 'Kembali ke Daftar</a><span class="gf-actions__spacer"></span>' +
       '<button type="button" class="gf-btn gf-btn--text" data-reset>' + (rec ? 'Batalkan perubahan' : 'Kosongkan formulir') + '</button>' +
       '<button type="submit" class="gf-btn gf-btn--primary">' + ic('save') + 'Simpan Clearance</button></div></form>';
-    var form = app.querySelector('#gf-form'), sigEl = form.querySelector('[data-sig]');
+    var form = app.querySelector('#gf-form'), sigEl = form.querySelector('[data-sig="it"]'), empEl = form.querySelector('[data-sig="emp"]');
     var rememberEl = form.querySelector('[data-remember]'), signerEl = form.querySelector('[name="it_signer"]');
     GF.wire(form);
     paintSig();
+    paintEmp();
     paintRemember();
+    // The employee's name under their signature follows the Nama field.
+    function paintEmpName() { var n = GF.val(form, 'name'); empEl.querySelector('[data-empname]').textContent = n || '(nama karyawan)'; }
+    form.querySelector('[name="name"]').addEventListener('input', paintEmpName);
+    paintEmpName();
 
     /* Remembered signature and name: kept while "Ingat TTD & nama" is ticked, follow a new signature or name,
        gone when unticked. A name alone is remembered too (the signature comes once it is made). */
@@ -204,31 +215,40 @@
             '<input class="gf-input cl-acc__note" name="accnote_' + a.key + '" maxlength="' + DEF.noteMax + '" aria-label="Catatan ' + esc(a.label) + '" value="' + esc((it.notes || {})[a.key] || '') + '"></div>';
         }).join('') + '</div>';
     }
-    function paintSig(busy) {
-      var box = sigEl.querySelector('[data-sigbox]');
+    /* One signature box: the picture with Ganti / Hapus, or the button to sign; who = 'it' | 'emp'. */
+    function paintBox(el, S, who, busy) {
+      var box = el.querySelector('[data-sigbox]');
       box.innerHTML = busy ? '<span class="cl-sig__busy">Mengunggah tanda tangan…</span>'
-        : SIGN ? '<img class="cl-sig__img" src="' + esc(SIGN.url || BASE + '/berkas/' + SIGN.file.id) + '" alt="Tanda tangan Ka. Unit IT">' +
-          '<div class="cl-sig__tools"><button type="button" class="as-textbtn" data-sign>Ganti</button><button type="button" class="as-textbtn" data-unsign>Hapus</button></div>'
-        : '<button type="button" class="cl-sig__empty" data-sign>' + ic('pencil') + '<span>Klik untuk tanda tangan</span></button>';
+        : S ? '<img class="cl-sig__img" src="' + esc(S.url || BASE + '/berkas/' + S.file.id) + '" alt="Tanda tangan ' + (who === 'emp' ? 'karyawan' : 'Ka. Unit IT') + '">' +
+          '<div class="cl-sig__tools"><button type="button" class="as-textbtn" data-sign="' + who + '">Ganti</button><button type="button" class="as-textbtn" data-unsign="' + who + '">Hapus</button></div>'
+        : '<button type="button" class="cl-sig__empty" data-sign="' + who + '">' + ic('pencil') + '<span>Klik untuk tanda tangan</span></button>';
       AU.render(box);
     }
-    function sign() {
-      var nameEl = form.querySelector('[name="it_signer"]');
-      window.ASign.dialog(nameEl.value.trim(), function (canvas, typedName) {
-        paintSig(true);
+    function paintSig(busy) { paintBox(sigEl, SIGN, 'it', busy); }
+    function paintEmp(busy) { paintBox(empEl, EMP, 'emp', busy); }
+    function sign(who) {
+      var emp = who === 'emp', nameEl = form.querySelector('[name="it_signer"]');
+      window.ASign.dialog(emp ? GF.val(form, 'name') : nameEl.value.trim(), function (canvas, typedName) {
+        (emp ? paintEmp : paintSig)(true);
         canvas.toBlob(function (blob) {
-          var body = new FormData(); body.append('file', new File([blob], 'ttd-ka-unit-it.png', { type: 'image/png' }));
+          var body = new FormData(); body.append('file', new File([blob], emp ? 'ttd-karyawan.png' : 'ttd-ka-unit-it.png', { type: 'image/png' }));
           post('/berkas', body, false).then(function (j) {
-            SIGN = { file: j.file, url: canvas.toDataURL('image/png') };
-            if (typedName && !nameEl.value.trim()) nameEl.value = typedName;
-            paintSig(); if (rememberEl.checked) remember(); if (kept) kept.touch();
-          }, function (err) { paintSig(); AU.toast('Tanda tangan gagal diunggah', err.message, 'error'); });
+            var s = { file: j.file, url: canvas.toDataURL('image/png') };
+            if (emp) { EMP = s; paintEmp(); }
+            else {
+              SIGN = s;
+              if (typedName && !nameEl.value.trim()) nameEl.value = typedName;
+              paintSig(); if (rememberEl.checked) remember();
+            }
+            if (kept) kept.touch();
+          }, function (err) { (emp ? paintEmp : paintSig)(); AU.toast('Tanda tangan gagal diunggah', err.message, 'error'); });
         }, 'image/png');
       });
     }
     form.addEventListener('click', function (e) {
-      if (e.target.closest('[data-sign]')) return sign();
-      if (e.target.closest('[data-unsign]')) { SIGN = null; paintSig(); if (kept) kept.touch(); return; }
+      var sb = e.target.closest('[data-sign]'), ub = e.target.closest('[data-unsign]');
+      if (sb) return sign(sb.getAttribute('data-sign'));
+      if (ub) { if (ub.getAttribute('data-unsign') === 'emp') { EMP = null; paintEmp(); } else { SIGN = null; paintSig(); } if (kept) kept.touch(); return; }
       var all = e.target.closest('[data-accall]');
       if (all) { // every access "Tidak ada masalah / Sudah dihapus", or none chosen
         var v = all.getAttribute('data-accall');
@@ -250,7 +270,8 @@
       GF.clear(form);
       if (!GF.need(form, ['name'])) return GF.firstErr(form);
       var out = { id: rec ? rec.id : '', name: GF.val(form, 'name'), nik: GF.val(form, 'nik'), position: GF.val(form, 'position'), resignDate: GF.val(form, 'resignDate'),
-        it: { access: {}, notes: {}, sign: SIGN ? { file: SIGN.file, name: GF.val(form, 'it_signer') } : null } };
+        it: { access: {}, notes: {}, sign: SIGN ? { file: SIGN.file, name: GF.val(form, 'it_signer') } : null },
+        employeeSign: EMP ? { file: EMP.file } : null };
       DEF.access.forEach(function (a) { out.it.access[a.key] = GF.val(form, 'acc_' + a.key); out.it.notes[a.key] = GF.val(form, 'accnote_' + a.key); });
       var btn = form.querySelector('button[type="submit"]'); btn.disabled = true;
       post('/simpan', { clearance: out }, true).then(function (j) {
@@ -265,7 +286,13 @@
     kept = GF.draft(form, { key: 'clearance:' + (rec ? rec.id : 'baru'), title: rec ? 'Clearance ' + rec.name : 'Form Clearance', extraCounts: true,
       extra: function () { var j = plain(); return j === SIGN0 ? '' : j; },
       label: function (dr) { return dr.values.name ? 'Karyawan: ' + dr.values.name : ''; },
-      // Only a kept signature of this form's shape comes back (an older kept draft may have another shape).
-      restore: function (x) { var s = null; try { s = JSON.parse(x || 'null'); } catch (e) {} if (s && s.file && s.file.id) { SIGN = s; paintSig(); } } });
+      // Kept signatures come back: {it, emp}, or an older draft's Ka. Unit IT signature alone ({file}).
+      restore: function (x) {
+        var s = null; try { s = JSON.parse(x || 'null'); } catch (e) {}
+        if (!s) return;
+        if (s.file && s.file.id) s = { it: s };
+        if (s.it && s.it.file && s.it.file.id) { SIGN = s.it; paintSig(); }
+        if (s.emp && s.emp.file && s.emp.file.id) { EMP = s.emp; paintEmp(); }
+      } });
   }
 })();

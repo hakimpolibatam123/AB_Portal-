@@ -41,15 +41,18 @@ final class ClearanceExcel
         foreach (Clearance::IT_ACCESS as $label) {
             $titles[] = $label;
         }
-        array_push($titles, 'Keterangan', 'Status Unit IT', 'TTD Ka. Unit IT', 'Tgl. TTD', 'Dibuat oleh', 'Diperbarui', 'Diperbarui oleh');
+        array_push($titles, 'Keterangan', 'Status Unit IT', 'TTD Karyawan', 'Tgl. TTD Karyawan', 'TTD Ka. Unit IT', 'Tgl. TTD Ka. Unit IT', 'Dibuat oleh', 'Diperbarui', 'Diperbarui oleh');
         $writer->addRow(Row::fromValues($titles, $head));
 
         $signed = 0;
+        $empSigned = 0;
         $issues = 0;
         foreach ($records as $i => $r) {
             $it = $r['it'] ?? [];
             $progress = Clearance::progress($r);
             $signed += $progress['signed'] ? 1 : 0;
+            $emp = $r['employeeSign'] ?? null;
+            $empSigned += $emp !== null ? 1 : 0;
             $issues += $progress['issue'] ? 1 : 0;
             $cells = [
                 Cell::fromValue($i + 1), Cell::fromValue((string) $r['id']), Cell::fromValue((string) $r['name']),
@@ -69,6 +72,8 @@ final class ClearanceExcel
             array_push($cells,
                 Cell::fromValue(implode("\n", $notes), $notes !== [] ? $wrap : null),
                 Cell::fromValue($progress['label']),
+                Cell::fromValue($emp !== null ? 'Sudah ditandatangani' : 'Belum ditandatangani', $emp === null ? $none : null),
+                self::dateTime($emp['at'] ?? null, $dateTime),
                 Cell::fromValue($sign !== null ? (trim((string) ($sign['name'] ?? '')) ?: '(tanpa nama)') : 'Belum ditandatangani', $sign === null ? $none : null),
                 self::dateTime($sign['at'] ?? null, $dateTime),
                 Cell::fromValue((string) ($r['createdBy'] ?? '')),
@@ -81,7 +86,7 @@ final class ClearanceExcel
         foreach (Clearance::IT_ACCESS as $label) {
             $widths[] = max(12, mb_strlen($label) + 2);
         }
-        array_push($widths, 42, 20, 22, 17, 18, 17, 18);
+        array_push($widths, 42, 20, 20, 17, 22, 17, 18, 17, 18);
         foreach ($widths as $i => $width) {
             $sheet->setColumnWidth($width, $i + 1);
         }
@@ -98,6 +103,8 @@ final class ClearanceExcel
             ['Karyawan didata', count($records)],
             ['Sudah TTD Ka. Unit IT', $signed],
             ['Belum TTD Ka. Unit IT', count($records) - $signed],
+            ['Sudah TTD Karyawan', $empSigned],
+            ['Belum TTD Karyawan', count($records) - $empSigned],
             ['Ada akses bermasalah', $issues],
         ];
         foreach ($lines as [$name, $value]) {

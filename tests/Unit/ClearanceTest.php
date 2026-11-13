@@ -65,6 +65,18 @@ final class ClearanceTest extends TestCase
         self::assertNull(Clearance::normalize($in, $first, 'CLR-2026-0001', 'Hakim', $later, [])['it']['sign']);
     }
 
+    public function testTheEmployeeSignsToo(): void
+    {
+        $in = $this->input(['employeeSign' => ['file' => ['id' => 8], 'name' => 'nama lain']]);
+        $r = Clearance::normalize($in, null, 'CLR-2026-0001', 'Admin IT', self::NOW, [7 => 'ttd.png', 8 => 'ttd-karyawan.png']);
+        self::assertSame(['id' => 8, 'name' => 'ttd-karyawan.png'], $r['employeeSign']['file']);
+        self::assertSame(['Putri Ayu', self::NOW], [$r['employeeSign']['name'], $r['employeeSign']['at']], 'the name is the employee\'s own');
+        self::assertNull(Clearance::normalize($this->input(), null, 'X', 'A', self::NOW, [7 => 'ttd.png'])['employeeSign'], 'optional');
+        $this->expectRule('tanda tangan', fn () => Clearance::normalize($in, null, 'X', 'A', self::NOW, [7 => 'ttd.png']));
+        $later = Clearance::normalize($in, $r, 'CLR-2026-0001', 'Hakim', '2026-11-20T03:00:00.000Z', [7 => 'ttd.png']);
+        self::assertSame(self::NOW, $later['employeeSign']['at'], 'same file: signed at stays');
+    }
+
     public function testNextIdCountsPerYear(): void
     {
         self::assertSame('CLR-2026-0001', Clearance::nextId([], '2026'));
@@ -115,6 +127,8 @@ final class ClearanceTest extends TestCase
         self::assertSame(['Belum ditandatangani', 'Ka IT A'], [$rows['Data'][1][$col['TTD Ka. Unit IT']], $rows['Data'][2][$col['TTD Ka. Unit IT']]]);
         self::assertInstanceOf(\DateTimeImmutable::class, $rows['Data'][2][$col['Tgl. Pengunduran Diri']]);
         self::assertContains(['Ada akses bermasalah', 1], $rows['Ringkasan']);
+        self::assertSame(['Belum ditandatangani', 'Belum ditandatangani'], [$rows['Data'][1][$col['TTD Karyawan']], $rows['Data'][2][$col['TTD Karyawan']]]);
+        self::assertContains(['Sudah TTD Karyawan', 0], $rows['Ringkasan']);
     }
 
     private function expectRule(string $message, callable $action): void

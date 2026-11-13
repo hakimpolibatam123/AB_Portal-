@@ -7,11 +7,12 @@ use RuntimeException;
 
 /**
  * Form Clearance of a leaving employee, as kept by Unit IT: the employee's data and the Unit IT part only — the
- * accesses checked (and removed), a note per access, and the signature of Ka. Unit IT (typed, drawn or uploaded;
- * it can be changed). The export (ClearancePdf) is a recap of every employee recorded.
+ * accesses checked (and removed), a note per access, the signature of Ka. Unit IT and that of the employee (typed,
+ * drawn or uploaded; they can be changed). The exports (ClearancePdf, ClearanceExcel) recap every employee recorded.
  *
  * Record: {id, name, nik, position, resignDate, it: {access: {key: ''|ok|issue}, notes: {key: text}, sign},
- *          createdAt, createdBy, updatedAt, updatedBy}; sign is {file: {id, name}, at, name} or null.
+ *          employeeSign, createdAt, createdBy, updatedAt, updatedBy}; a sign is {file: {id, name}, at, name} or null
+ *          (employeeSign's name is the employee's name; older records have no employeeSign).
  */
 final class Clearance
 {
@@ -60,6 +61,8 @@ final class Clearance
                 'notes' => $notes,
                 'sign' => self::signature($it['sign'] ?? null, $existing['it']['sign'] ?? null, $files, $now),
             ],
+            // The resigning employee's own signature; its name is always the employee's name.
+            'employeeSign' => self::named(self::signature($in['employeeSign'] ?? null, $existing['employeeSign'] ?? null, $files, $now), $name),
             'createdAt' => $existing['createdAt'] ?? $now,
             'createdBy' => $existing['createdBy'] ?? $by,
             'updatedAt' => $now,
@@ -115,6 +118,11 @@ final class Clearance
             throw new RuntimeException('Berkas tanda tangan tidak ditemukan. Ulangi tanda tangan.');
         }
         return ['file' => ['id' => $id, 'name' => $files[$id]], 'at' => $now, 'name' => $name];
+    }
+
+    private static function named(?array $sign, string $name): ?array
+    {
+        return $sign === null ? null : ['name' => $name] + $sign;
     }
 
     private static function text(mixed $value, int $max, bool $multiline = false): string
