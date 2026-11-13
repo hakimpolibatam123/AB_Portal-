@@ -144,27 +144,30 @@ final class ClearanceController extends Controller
     public function pdf(): void
     {
         $pdo = Database::connection();
-        $records = (new ClearanceRepository($pdo))->all();
+        // The filters of the list (?q, dari, sampai, status) choose which employees are in the recap.
+        $records = Clearance::filter((new ClearanceRepository($pdo))->all(), $_GET);
+        $filter = Clearance::filterText($_GET);
         $files = new Attachment($pdo);
         $pdf = ClearancePdf::render($records, static function (?array $file) use ($files): ?string {
             $found = $file !== null ? $files->find((int) ($file['id'] ?? 0)) : null;
             return $found !== null && $found['owner_type'] === self::FILE_OWNER ? Attachment::path($found) : null;
-        }, Format::dateTime(gmdate('Y-m-d H:i:s')));
-        Audit::tryLog('export', 'clearance', null, ['text' => 'Rekap clearance PDF (' . count($records) . ' karyawan) diunduh']);
+        }, Format::dateTime(gmdate('Y-m-d H:i:s')), $filter);
+        Audit::tryLog('export', 'clearance', null, ['text' => 'Rekap clearance PDF (' . count($records) . ' karyawan; ' . $filter . ') diunduh']);
         $this->download($pdf, 'application/pdf', 'pdf');
     }
 
     /** GET /clearance/excel: the same recap as an Excel workbook (ClearanceExcel). */
     public function excel(): void
     {
-        $records = (new ClearanceRepository(Database::connection()))->all();
+        $records = Clearance::filter((new ClearanceRepository(Database::connection()))->all(), $_GET);
+        $filter = Clearance::filterText($_GET);
         $dir = BASE_PATH . '/storage/app/tmp';
         if (!is_dir($dir)) {
             @mkdir($dir, 0770, true);
         }
         $path = $dir . '/' . bin2hex(random_bytes(8)) . '.xlsx';
         try {
-            ClearanceExcel::write($records, $path, Format::dateTime(gmdate('Y-m-d H:i:s')));
+            ClearanceExcel::write($records, $path, Format::dateTime(gmdate('Y-m-d H:i:s')), $filter);
             $body = (string) file_get_contents($path);
         } catch (Throwable $exception) {
             error_log('Ekspor Excel clearance: ' . $exception->getMessage());
@@ -174,7 +177,7 @@ final class ClearanceController extends Controller
         } finally {
             @unlink($path);
         }
-        Audit::tryLog('export', 'clearance', null, ['text' => 'Rekap clearance Excel (' . count($records) . ' karyawan) diunduh']);
+        Audit::tryLog('export', 'clearance', null, ['text' => 'Rekap clearance Excel (' . count($records) . ' karyawan; ' . $filter . ') diunduh']);
         $this->download($body, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'xlsx');
     }
 

@@ -255,6 +255,14 @@ a.as-list__item:hover { background: #FAFCFB; }
 .cl-acc__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 4px 0 8px; }
 .gf-btn.cl-acc__all { min-height: 36px; padding: 6px 14px; font-size: 13.5px; gap: 6px; }
 .cl-sigs--one { grid-template-columns: minmax(0, 320px); }
+/* Daftar Clearance filters (they also choose what Ekspor Excel / PDF download). */
+.cl-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; padding: 14px 20px; }
+.cl-filters .as-search { flex: 1 1 240px; }
+.cl-filters__f { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--rs-muted); }
+.cl-filters__f .pm-input { min-width: 150px; }
+.cl-filters__reset { align-self: center; }
+.cl-filters__note { margin: -6px 20px 10px; font-size: 12.5px; color: var(--rs-teal-800); }
+.rs-btn.is-disabled { opacity: .5; pointer-events: none; }
 /* Form Clearance signatures like a letter: Ka. Unit IT at the far left, the employee at the far right. */
 .cl-sigs--pair { grid-template-columns: minmax(0, 280px) minmax(0, 280px); justify-content: space-between; column-gap: 24px; }
 .cl-sigs--pair > [data-sig="it"] { order: -1; }

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Helpers\Format;
 use RuntimeException;
 
 /**
@@ -93,6 +94,69 @@ final class Clearance
             'label' => $issue ? 'Ada akses bermasalah' : ($signed ? 'Sudah TTD IT' : 'Belum TTD IT')];
     }
 
+    /** Filters of the list and of its PDF / Excel export (?status=). */
+    public const FILTER_STATUS = [
+        'signed' => 'Sudah TTD Ka. Unit IT', 'unsigned' => 'Belum TTD Ka. Unit IT', 'issue' => 'Ada akses bermasalah',
+        'emp_signed' => 'Sudah TTD karyawan', 'emp_unsigned' => 'Belum TTD karyawan',
+    ];
+
+    /**
+     * The records the list shows for these filters (query of /clearance/pdf and /clearance/excel): q searches the
+     * number, name, NIK and position; dari / sampai bound the resignation date (Y-m-d; a record without one is left
+     * out once a date is set); status is a key of FILTER_STATUS. Unknown or empty values do not filter.
+     *
+     * @param list<array> $records
+     * @return list<array>
+     */
+    public static function filter(array $records, array $query): array
+    {
+        $f = self::filters($query);
+        return array_values(array_filter($records, static function (array $r) use ($f): bool {
+            if ($f['q'] !== '' && !str_contains(mb_strtolower(implode(' ', [$r['id'] ?? '', $r['name'] ?? '', $r['nik'] ?? '', $r['position'] ?? ''])), $f['q'])) {
+                return false;
+            }
+            $date = (string) ($r['resignDate'] ?? '');
+            if (($f['dari'] !== '' || $f['sampai'] !== '') && $date === '') {
+                return false;
+            }
+            if (($f['dari'] !== '' && $date < $f['dari']) || ($f['sampai'] !== '' && $date > $f['sampai'])) {
+                return false;
+            }
+            $p = self::progress($r);
+            $emp = ($r['employeeSign'] ?? null) !== null;
+            return match ($f['status']) {
+                'signed' => $p['signed'], 'unsigned' => !$p['signed'], 'issue' => $p['issue'],
+                'emp_signed' => $emp, 'emp_unsigned' => !$emp,
+                default => true,
+            };
+        }));
+    }
+
+    /** The filters in words for the export ("Semua karyawan" when none), e.g. "Tgl. pengunduran diri 1 Nov 2026 – 30 Nov 2026 · Belum TTD Ka. Unit IT". */
+    public static function filterText(array $query): string
+    {
+        $f = self::filters($query);
+        $parts = [];
+        if ($f['dari'] !== '' || $f['sampai'] !== '') {
+            $parts[] = 'Tgl. pengunduran diri ' . ($f['dari'] !== '' ? Format::date($f['dari']) : 'awal') . ' – ' . ($f['sampai'] !== '' ? Format::date($f['sampai']) : 'sekarang');
+        }
+        if ($f['status'] !== '') {
+            $parts[] = self::FILTER_STATUS[$f['status']];
+        }
+        if ($f['q'] !== '') {
+            $parts[] = 'Cari "' . $f['q'] . '"';
+        }
+        return $parts === [] ? 'Semua karyawan' : implode(' · ', $parts);
+    }
+
+    /** @return array{q: string, dari: string, sampai: string, status: string} */
+    private static function filters(array $query): array
+    {
+        $date = static fn (mixed $v): string => is_string($v) && self::isDate($v) ? $v : '';
+        $status = is_string($query['status'] ?? null) && isset(self::FILTER_STATUS[$query['status']]) ? $query['status'] : '';
+        return ['q' => mb_strtolower(self::text($query['q'] ?? '', 100)), 'dari' => $date($query['dari'] ?? ''), 'sampai' => $date($query['sampai'] ?? ''), 'status' => $status];
+    }
+
     /** What the page draws the form from. */
     public static function definition(): array
     {
@@ -100,7 +164,7 @@ final class Clearance
         foreach (self::IT_ACCESS as $key => $label) {
             $access[] = ['key' => $key, 'label' => $label];
         }
-        return ['access' => $access, 'accessStatus' => self::ACCESS_STATUS, 'noteMax' => self::NOTE_MAX];
+        return ['access' => $access, 'accessStatus' => self::ACCESS_STATUS, 'noteMax' => self::NOTE_MAX, 'filterStatus' => self::FILTER_STATUS];
     }
 
     /** @param array<int, string> $files */

@@ -48,19 +48,47 @@
     // ?baru=<id>: the clearance just saved, marked in the list (the address is cleaned so a reload does not mark it again).
     var fresh = new URLSearchParams(location.search).get('baru') || '';
     if (fresh && history.replaceState) history.replaceState(null, '', API);
+    var FS = DEF.filterStatus || {};
     app.innerHTML = '<section class="rs-card"><div class="rs-card__head"><div><h2>' + ic('user-check') + 'Daftar Clearance</h2><p data-count>' + all.length + ' clearance</p></div>' +
-      '<div class="rs-actions">' + (all.length ? '<a class="rs-btn rs-btn--sm2" href="' + API + '/excel" title="Rekap semua karyawan yang didata (Excel)">' + ic('table-2') + 'Ekspor Excel</a>' +
-        '<a class="rs-btn rs-btn--sm2" href="' + API + '/pdf" title="Rekap semua karyawan yang didata (PDF)">' + ic('download') + 'Ekspor PDF</a>' : '') +
+      '<div class="rs-actions">' + (all.length ? '<a class="rs-btn rs-btn--sm2" data-export="excel" href="' + API + '/excel" title="Rekap karyawan sesuai filter (Excel)">' + ic('table-2') + 'Ekspor Excel</a>' +
+        '<a class="rs-btn rs-btn--sm2" data-export="pdf" href="' + API + '/pdf" title="Rekap karyawan sesuai filter (PDF)">' + ic('download') + 'Ekspor PDF</a>' : '') +
       '<a class="rs-btn rs-btn--primary rs-btn--sm2" href="' + API + '/isi">' + ic('circle-plus') + 'Buat Clearance</a></div></div>' +
-      (all.length ? '<div class="fr-filters" style="padding:14px 20px"><label class="as-search">' + ic('search') + '<input class="pm-input" type="search" placeholder="Cari nama, NIK, nomor…" data-q aria-label="Cari clearance"></label></div>' : '') +
+      // Filters of the list; Ekspor Excel / PDF download the same selection (Clearance::filter on the server).
+      (all.length ? '<div class="fr-filters cl-filters"><label class="as-search">' + ic('search') + '<input class="pm-input" type="search" placeholder="Cari nama, NIK, nomor…" data-f="q" aria-label="Cari clearance"></label>' +
+        '<label class="cl-filters__f"><span>Pengunduran diri dari</span><input class="pm-input" type="date" data-f="dari"></label>' +
+        '<label class="cl-filters__f"><span>Sampai</span><input class="pm-input" type="date" data-f="sampai"></label>' +
+        '<label class="cl-filters__f"><span>Status</span><select class="pm-input" data-f="status"><option value="">Semua</option>' +
+          Object.keys(FS).map(function (k) { return '<option value="' + esc(k) + '">' + esc(FS[k]) + '</option>'; }).join('') + '</select></label>' +
+        '<button type="button" class="as-textbtn cl-filters__reset" data-freset hidden>Hapus filter</button></div>' +
+        '<p class="cl-filters__note" data-fnote hidden></p>' : '') +
       '<div data-table></div></section>';
-    var box = app.querySelector('[data-table]'), q = app.querySelector('[data-q]');
+    var box = app.querySelector('[data-table]');
+    function fval(k) { var el = app.querySelector('[data-f="' + k + '"]'); return el ? el.value.trim() : ''; }
+    // Same rule as Clearance::filter().
+    function match(r) {
+      var s = fval('q').toLowerCase(), dari = fval('dari'), sampai = fval('sampai'), st = fval('status'), d = r.resignDate || '';
+      if (s && [r.id, r.name, r.nik, r.position].join(' ').toLowerCase().indexOf(s) === -1) return false;
+      if ((dari || sampai) && !d) return false;
+      if ((dari && d < dari) || (sampai && d > sampai)) return false;
+      var p = r.progress || progress(r), emp = !!r.employeeSign;
+      return st === 'signed' ? p.signed : st === 'unsigned' ? !p.signed : st === 'issue' ? p.issue : st === 'emp_signed' ? emp : st === 'emp_unsigned' ? !emp : true;
+    }
+    /* The download buttons carry the filters; the count and a short note say what is shown and downloaded. */
+    function paintFilters(n) {
+      var qs = new URLSearchParams(); ['q', 'dari', 'sampai', 'status'].forEach(function (k) { if (fval(k)) qs.set(k, fval(k)); });
+      var s = qs.toString(), on = s !== '';
+      app.querySelectorAll('[data-export]').forEach(function (a) { a.href = API + '/' + a.getAttribute('data-export') + (on ? '?' + s : ''); a.classList.toggle('is-disabled', n === 0); a.setAttribute('aria-disabled', String(n === 0)); });
+      app.querySelector('[data-count]').textContent = on ? n + ' dari ' + all.length + ' clearance' : all.length + ' clearance';
+      var reset = app.querySelector('[data-freset]'), note = app.querySelector('[data-fnote]');
+      if (reset) reset.hidden = !on;
+      if (note) { note.hidden = !on; note.textContent = n ? 'Ekspor Excel / PDF berisi ' + n + ' karyawan sesuai filter.' : 'Tidak ada karyawan yang cocok, ekspor kosong.'; }
+    }
     function draw() {
-      var s = q ? q.value.trim().toLowerCase() : '';
-      var rows = all.filter(function (r) { return !s || [r.id, r.name, r.nik, r.position].join(' ').toLowerCase().indexOf(s) !== -1; });
+      var rows = all.filter(match);
+      paintFilters(rows.length);
       box.innerHTML = !all.length
         ? '<div class="rs-empty">' + ic('user-check') + '<b>Belum ada clearance</b><span>Buat clearance untuk karyawan yang mengundurkan diri.</span><a class="rs-btn rs-btn--primary rs-btn--sm2" href="' + API + '/isi">' + ic('circle-plus') + 'Buat Clearance</a></div>'
-        : !rows.length ? '<div class="rs-empty">' + ic('search') + '<b>Tidak ada yang cocok</b><span>Ubah kata kunci pencarian.</span></div>'
+        : !rows.length ? '<div class="rs-empty">' + ic('search') + '<b>Tidak ada yang cocok</b><span>Ubah kata kunci atau filter.</span></div>'
         : '<div class="rs-table-wrap"><table class="rs-table as-table"><thead><tr><th scope="col">No. Clearance</th><th scope="col">Karyawan</th><th scope="col">Bagian / Jabatan</th><th scope="col">Tgl. Pengunduran Diri</th><th scope="col">Unit IT</th><th scope="col">Diperbarui</th><th scope="col" class="as-td-tight"><span class="as-sr">Aksi</span></th></tr></thead><tbody>' +
           rows.map(function (r) {
             // A click on the row shows it in a window; the pencil edits it, the bin removes it.
@@ -84,15 +112,17 @@
         if (!yes) return false;
         return post('/hapus', { id: r.id }, true).then(function () {
           all = all.filter(function (x) { return x.id !== r.id; }); D.list = all;
-          app.querySelector('[data-count]').textContent = all.length + ' clearance';
           draw();
           AU.toast('Clearance dihapus', r.name + ' · ' + r.id, 'success');
           return true;
         }, function (err) { AU.toast('Clearance belum terhapus', err.message, 'error'); return false; });
       });
     }
-    if (q) q.addEventListener('input', draw);
+    // Every edit (typing a date included) redraws the table and the download links at once.
+    app.querySelectorAll('[data-f]').forEach(function (el) { el.addEventListener('input', draw); el.addEventListener('change', draw); });
     app.addEventListener('click', function (e) {
+      if (e.target.closest('[data-freset]')) { app.querySelectorAll('[data-f]').forEach(function (el) { el.value = ''; }); draw(); return; }
+      var ex = e.target.closest('[data-export].is-disabled'); if (ex) { e.preventDefault(); return; }
       var r = recOf(e.target); if (!r) return;
       if (e.target.closest('[data-del]')) { remove(r); return; }
       if (!e.target.closest('a, button')) view(r, remove);

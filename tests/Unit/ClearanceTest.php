@@ -77,6 +77,24 @@ final class ClearanceTest extends TestCase
         self::assertSame(self::NOW, $later['employeeSign']['at'], 'same file: signed at stays');
     }
 
+    public function testTheExportFollowsTheFilters(): void
+    {
+        $a = Clearance::normalize($this->input(), null, 'CLR-2026-0001', 'A', self::NOW, [7 => 'ttd.png']); // 30 Nov, signed, an issue
+        $b = Clearance::normalize(['name' => 'Budi', 'resignDate' => '2026-10-05'], null, 'CLR-2026-0002', 'A', self::NOW, []);
+        $c = Clearance::normalize(['name' => 'Citra'], null, 'CLR-2026-0003', 'A', self::NOW, []);
+        $ids = static fn (array $q): array => array_column(Clearance::filter([$a, $b, $c], $q), 'id');
+        self::assertSame(['CLR-2026-0001', 'CLR-2026-0002', 'CLR-2026-0003'], $ids([]));
+        self::assertSame(['CLR-2026-0001'], $ids(['dari' => '2026-11-01', 'sampai' => '2026-11-30']));
+        self::assertSame(['CLR-2026-0002'], $ids(['sampai' => '2026-10-31']), 'no resignation date: left out once a date is set');
+        self::assertSame(['CLR-2026-0002', 'CLR-2026-0003'], $ids(['status' => 'unsigned']));
+        self::assertSame(['CLR-2026-0001'], $ids(['status' => 'issue']));
+        self::assertSame(['CLR-2026-0003'], $ids(['q' => 'CITRA']));
+        self::assertSame(['CLR-2026-0001', 'CLR-2026-0002', 'CLR-2026-0003'], $ids(['status' => 'bogus', 'dari' => '2026-02-30']), 'unknown values do not filter');
+        self::assertSame('Semua karyawan', Clearance::filterText([]));
+        self::assertSame('Tgl. pengunduran diri 1 Nov 2026 – 30 Nov 2026 · Belum TTD Ka. Unit IT',
+            Clearance::filterText(['dari' => '2026-11-01', 'sampai' => '2026-11-30', 'status' => 'unsigned']));
+    }
+
     public function testNextIdCountsPerYear(): void
     {
         self::assertSame('CLR-2026-0001', Clearance::nextId([], '2026'));

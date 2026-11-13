@@ -21,7 +21,7 @@ final class ClearanceExcel
     public const STATUS = ['ok' => 'OK', 'issue' => 'Bermasalah', '' => 'Belum diperiksa'];
 
     /** @param list<array> $records records of App\Services\Clearance */
-    public static function write(array $records, string $path, string $printedAt): void
+    public static function write(array $records, string $path, string $printedAt, string $filter = 'Semua karyawan'): void
     {
         usort($records, static fn (array $a, array $b): int => strcmp((string) $a['id'], (string) $b['id']));
         $writer = new Writer();
@@ -100,6 +100,7 @@ final class ClearanceExcel
             ['Rumah sakit', $config['hospital'] . ' — ' . $config['unit']],
             ['Laporan', 'Rekap Clearance Karyawan'],
             ['Dicetak', $printedAt],
+            ['Filter', $filter],
             ['Karyawan didata', count($records)],
             ['Sudah TTD Ka. Unit IT', $signed],
             ['Belum TTD Ka. Unit IT', count($records) - $signed],

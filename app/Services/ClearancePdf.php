@@ -24,7 +24,7 @@ final class ClearancePdf
      * @param list<array> $records records of App\Services\Clearance
      * @param callable(?array): ?string $signaturePath the image file of a signature, or null
      */
-    public static function render(array $records, callable $signaturePath, string $printedAt): string
+    public static function render(array $records, callable $signaturePath, string $printedAt, string $filter = 'Semua karyawan'): string
     {
         $dir = BASE_PATH . '/storage/app/tmp/mpdf';
         if (!is_dir($dir)) {
@@ -44,7 +44,7 @@ final class ClearancePdf
         $logo = is_file($config['logo']) ? '<img src="' . e($config['logo']) . '" height="10mm">' : '<b>RS AWAL BROS</b>';
         $mpdf->SetHTMLHeader('<table width="100%" class="head"><tr><td width="78mm">' . $logo . '</td>'
             . '<td><div class="org">' . e($config['hospital'] . ' — ' . $config['unit']) . '</div><div class="title">Rekap Clearance Karyawan</div>'
-            . '<div class="meta">Data karyawan yang mengundurkan diri dan pemeriksaan akses oleh Unit IT</div></td></tr></table><div class="rule"></div>');
+            . '<div class="meta">Data karyawan yang mengundurkan diri dan pemeriksaan akses oleh Unit IT · Filter: ' . e($filter) . '</div></td></tr></table><div class="rule"></div>');
         $mpdf->SetHTMLFooter('<table width="100%" class="meta"><tr><td>Dicetak ' . e($printedAt) . '</td><td align="right">Halaman {PAGENO} dari {nbpg}</td></tr></table>');
         $mpdf->WriteHTML(self::css(), \Mpdf\HTMLParserMode::HEADER_CSS);
         $mpdf->WriteHTML(self::body($records, $signaturePath), \Mpdf\HTMLParserMode::HTML_BODY);
